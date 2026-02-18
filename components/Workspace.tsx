@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CampaignState, DesignAsset, MockupTemplate, Language, Brand, BrandKit } from '../types';
 import { gemini } from '../services/geminiService';
+import { composeImageWithLogo } from '../utils/imageCompose';
 import BrandManager from './BrandManager';
 
 interface WorkspaceProps {
@@ -23,6 +24,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenera
   const [extendingVideoAsset, setExtendingVideoAsset] = useState<DesignAsset | null>(null);
   const [extensionPrompt, setExtensionPrompt] = useState('');
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState<string | null>(null);
 
   const groupedAssets = useMemo(() => {
     const filtered = state.assets.filter(a => a.brand_id === state.activeBrandId);
@@ -61,7 +63,9 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenera
       prompt_modal_title: "Inteligência Criativa",
       extend_modal_title: "Narrativa Cinematic",
       extend_modal_sub: "O que acontece a seguir neste anúncio?",
-      extend_btn: "GERAR EXTENSÃO"
+      extend_btn: "GERAR EXTENSÃO",
+      export_logo: "Exportar com Logo",
+      exporting: "Exportando..."
     },
     en: {
       empty: "Your creative workspace will come to life as assets are generated.",
@@ -82,7 +86,9 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenera
       prompt_modal_title: "Creative Intel",
       extend_modal_title: "Cinematic Narrative",
       extend_modal_sub: "What happens next in this ad?",
-      extend_btn: "GENERATE EXTENSION"
+      extend_btn: "GENERATE EXTENSION",
+      export_logo: "Export with Logo",
+      exporting: "Exporting..."
     }
   }[language === 'es' ? 'en' : language];
 
@@ -101,6 +107,27 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenera
   const handleUpdateAssetCopy = (assetId: string, newCopy: string) => {
     const updated = state.assets.map(a => a.id === assetId ? { ...a, copy: newCopy } : a);
     onUpdateAssets(updated);
+  };
+
+  const handleExportWithLogo = async (asset: DesignAsset) => {
+    if (!activeBrand?.kit?.logoUrl || !asset.imageUrl) return;
+    setIsExporting(asset.id);
+    try {
+      const composedUrl = await composeImageWithLogo(asset.imageUrl, activeBrand.kit.logoUrl, {
+        position: 'bottom-right',
+        scale: 0.18,
+        opacity: 0.9,
+        padding: 32
+      });
+      const a = document.createElement('a');
+      a.href = composedUrl;
+      a.download = `${activeBrand.name}_post_${Date.now()}.png`;
+      a.click();
+    } catch (e) {
+      console.error("Export failed", e);
+    } finally {
+      setIsExporting(null);
+    }
   };
 
   if (!activeBrand && groupedAssets.length === 0) {
@@ -206,6 +233,11 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenera
                           <button onClick={() => setViewingPromptAsset(asset)} className="w-full py-4 bg-neutral-800 text-white text-[10px] font-bold rounded-2xl border border-white/5 uppercase tracking-widest">{t.view_prompt}</button>
                           {asset.videoUrl && asset.metadata && (
                             <button onClick={() => setExtendingVideoAsset(asset)} className="w-full py-4 bg-indigo-600 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl">{t.extend_video}</button>
+                          )}
+                          {asset.imageUrl && activeBrand?.kit?.logoUrl && (
+                             <button onClick={() => handleExportWithLogo(asset)} disabled={!!isExporting} className="w-full py-4 bg-white text-black text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl active:scale-95 disabled:opacity-50">
+                               {isExporting === asset.id ? t.exporting : t.export_logo}
+                             </button>
                           )}
                         </div>
                       </div>

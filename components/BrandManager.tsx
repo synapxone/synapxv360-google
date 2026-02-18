@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Brand, Language, BrandKit } from '../types';
 import { gemini } from '../services/geminiService';
+import { supabase, supabaseService } from '../services/supabaseService';
 
 interface BrandManagerProps {
   brand?: Brand;
@@ -16,8 +17,8 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
   const [website, setWebsite] = useState(brand?.website || '');
   const [instagram, setInstagram] = useState(brand?.instagram || '');
   const [visualRefs, setVisualRefs] = useState<string[]>(brand?.visualReferences || []);
+  const [userId, setUserId] = useState<string | null>(null);
   
-  // Inicializa com um kit padrão se não houver um para permitir upload manual
   const [kit, setKit] = useState<BrandKit>(brand?.kit || {
     name: brand?.name || '',
     concept: '',
@@ -29,6 +30,10 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id || null));
+  }, []);
 
   const t = {
     pt: {
@@ -81,7 +86,6 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
     setError(null);
     try {
       const proposal = await gemini.generateBrandProposal(name, website, instagram, visualRefs);
-      // Mescla com logos já existentes para não perder no re-scan
       setKit(prev => ({
         ...proposal,
         logoUrl: prev.logoUrl || proposal.logoUrl,
@@ -96,10 +100,23 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
     }
   };
 
-  const handleAssetUpload = (type: 'logo' | 'symbol' | 'icon' | 'variation', e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAssetUpload = async (type: 'logo' | 'symbol' | 'icon' | 'variation', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    // Fix: Explicitly check if file is an instance of Blob to avoid TypeScript 'unknown' error on line 125
-    if (file instanceof Blob) {
+    if (file && userId && brand?.id) {
+      try {
+        const publicUrl = await supabaseService.uploadBrandLogo(userId, brand.id, file);
+        setKit(prev => {
+          if (type === 'logo') return { ...prev, logoUrl: publicUrl };
+          if (type === 'symbol') return { ...prev, symbolUrl: publicUrl };
+          if (type === 'icon') return { ...prev, iconUrl: publicUrl };
+          if (type === 'variation') return { ...prev, logoVariations: [...(prev.logoVariations || []), publicUrl] };
+          return prev;
+        });
+      } catch (err) {
+        console.error("Upload error", err);
+      }
+    } else if (file) {
+      // Fallback for new brands without ID yet
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
@@ -119,7 +136,6 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
     const files = e.target.files;
     if (files) {
       Array.from(files).forEach(file => {
-        // Fix: Explicitly check if file is an instance of Blob to avoid potential type issues
         if (file instanceof Blob) {
           const reader = new FileReader();
           reader.onloadend = () => {

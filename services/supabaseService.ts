@@ -127,5 +127,22 @@ export const supabaseService = {
   async getPlans(): Promise<Plan[]> {
     const { data } = await supabase.from('plans').select('*').eq('is_active', true).order('price', { ascending: true });
     return data || [];
+  },
+
+  async uploadBrandLogo(userId: string, brandId: string, file: File): Promise<string> {
+    const ext = file.name.split('.').pop();
+    const path = `brands/${userId}/${brandId}/logo.${ext}`;
+
+    const { error } = await supabase.storage
+      .from('brand-assets')
+      .upload(path, file, { upsert: true });
+
+    if (error) throw error;
+
+    const { data } = supabase.storage
+      .from('brand-assets')
+      .getPublicUrl(path);
+
+    return data.publicUrl;
   }
 };
