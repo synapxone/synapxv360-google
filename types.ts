@@ -59,31 +59,10 @@ export interface Brand {
   name: string;
   website?: string;
   instagram?: string;
+  competitorWebsites?: string[];
   visualReferences?: string[]; 
   videoReferences?: string[];
   kit?: BrandKit;
-  created_at?: string;
-}
-
-export interface DesignAsset {
-  id: string;
-  brand_id: string;
-  group_id: string;
-  group_title: string;
-  name: string;
-  type: string;
-  dimensions: string;
-  imageUrl?: string;
-  videoUrl?: string;
-  audioUrl?: string;
-  referenceImageUrl?: string;
-  prompt: string;
-  description: string;
-  copy?: string;
-  status?: 'pending' | 'approved' | 'rejected';
-  // isMockup used to identify if an asset is a technical mockup
-  isMockup?: boolean;
-  metadata?: any;
   created_at?: string;
 }
 
@@ -114,4 +93,32 @@ export interface Message {
   ideas?: IdeaOption[];
   attachedAssetIds?: string[];
   metadata?: any;
+}
+
+export interface DesignAsset {
+  id: string;
+  brand_id: string;
+  group_id: string;
+  group_title: string;
+  name: string;
+  type: string;
+  dimensions: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  audioUrl?: string;
+  referenceImageUrl?: string;
+  prompt: string;
+  description: string;
+  copy?: string;
+  status?: 'pending' | 'approved' | 'rejected';
+  isMockup?: boolean;
+  metadata?: any;
+  created_at?: string;
+  performance?: {
+    views?: number;
+    clicks?: number;
+    ctr?: number;
+    engagement_score?: number;
+    feedback?: 'approved' | 'rejected' | 'top_performer';
+  };
 }

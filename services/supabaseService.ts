@@ -25,6 +25,7 @@ export const supabaseService = {
       name: dbBrand.name,
       website: dbBrand.website || '',
       instagram: dbBrand.instagram || '',
+      competitorWebsites: dbBrand.competitor_websites || [],
       visualReferences: dbBrand.visual_references || [],
       kit: dbBrand.brand_kit && Object.keys(dbBrand.brand_kit).length > 0 ? dbBrand.brand_kit : undefined,
       created_at: dbBrand.created_at
@@ -43,14 +44,15 @@ export const supabaseService = {
       type: a.type,
       dimensions: a.dimensions,
       imageUrl: a.image_url,
-      videoUrl: a.video_url,
-      audioUrl: a.audio_url,
+      video_url: a.video_url,
+      audio_url: a.audio_url,
       prompt: a.prompt,
       copy: a.copy,
       status: a.status,
-      isMockup: a.is_mockup,
+      is_mockup: a.is_mockup,
       metadata: a.metadata,
-      created_at: a.created_at
+      created_at: a.created_at,
+      performance: a.performance
     }));
   },
 
@@ -70,7 +72,8 @@ export const supabaseService = {
       copy: asset.copy,
       status: asset.status,
       is_mockup: asset.isMockup,
-      metadata: asset.metadata
+      metadata: asset.metadata,
+      performance: asset.performance
     };
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(asset.id);
@@ -82,8 +85,16 @@ export const supabaseService = {
     }
   },
 
+  async updateAssetPerformance(assetId: string, performanceData: any) {
+    return await supabase.from('assets').update({ performance: performanceData }).eq('id', assetId);
+  },
+
   async deleteAsset(assetId: string) {
     return await supabase.from('assets').delete().eq('id', assetId);
+  },
+
+  async deleteAssetsByGroup(groupId: string) {
+    return await supabase.from('assets').delete().eq('group_id', groupId);
   },
 
   async updateGroupTitle(groupId: string, newTitle: string) {
@@ -96,6 +107,7 @@ export const supabaseService = {
       name: brand.name,
       website: brand.website || '',
       instagram: brand.instagram || '',
+      competitor_websites: brand.competitorWebsites || [],
       brand_kit: brand.kit || {},
       visual_references: brand.visualReferences || []
     };
@@ -115,16 +127,6 @@ export const supabaseService = {
 
   async deleteBrand(brandId: string) {
     return await supabase.from('brands').delete().eq('id', brandId);
-  },
-
-  async saveProjectState(userId: string, state: CampaignState, messages: any[]) {
-    const cleanState = { activeBrandId: state.activeBrandId, brief: state.brief };
-    return await supabase.from('projects').upsert({ 
-      user_id: userId, 
-      state_data: cleanState, 
-      message_history: messages,
-      updated_at: new Date()
-    }, { onConflict: 'user_id' });
   },
 
   async uploadBrandLogo(userId: string, brandId: string, file: File): Promise<string> {

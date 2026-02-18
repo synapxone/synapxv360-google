@@ -1,30 +1,39 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Message, Language, DesignAsset } from '../types';
+import { Message, Language, DesignAsset, Brand } from '../types';
 import { LoadingStage } from '../App';
+import { TEMPLATES } from '../data/templates';
 
 interface ChatAreaProps {
   messages: Message[];
-  onSendMessage: (content: string, image?: string) => void;
+  onSendMessage: (content: string, image?: string, metadata?: any) => void;
   isLoading: boolean;
   loadingStage: LoadingStage;
   language: Language;
   allAssets: DesignAsset[];
   onAssetAction: (id: string, status: 'approved' | 'rejected') => void;
+  activeBrand?: Brand;
 }
 
-const ChatArea: React.FC<ChatAreaProps> = ({ messages, onSendMessage, isLoading, loadingStage, language, allAssets, onAssetAction }) => {
+const ChatArea: React.FC<ChatAreaProps> = ({ messages, onSendMessage, isLoading, loadingStage, language, allAssets, onAssetAction, activeBrand }) => {
   const [input, setInput] = useState('');
   const [currentStatusIndex, setCurrentStatusIndex] = useState(0);
+  const [showTemplates, setShowTemplates] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+
+  const quickPrompts = [
+    { pt: "Criar post para Instagram", en: "Create Instagram post", icon: "📸" },
+    { pt: "Criar carrossel", en: "Create carousel", icon: "📑" },
+    { pt: "Vídeo do meu produto", en: "Product video", icon: "🎬" },
+    { pt: "Post para blog", en: "Blog post", icon: "✍️" },
+    { pt: "Analisar concorrentes", en: "Analyze competitors", icon: "🕵️" }
+  ];
 
   const statusMessages = {
     pt: {
       thinking: [
         "Pesquisando possibilidades...",
         "Analisando concorrência...",
-        "Cruzando dados de mercado...",
-        "Mapeando tendências globais...",
         "Consultando o Synapx Core...",
         "Refinando estratégia criativa...",
         "Comparando informações..."
@@ -37,8 +46,6 @@ const ChatArea: React.FC<ChatAreaProps> = ({ messages, onSendMessage, isLoading,
       thinking: [
         "Researching possibilities...",
         "Analyzing competition...",
-        "Cross-referencing market data...",
-        "Mapping global trends...",
         "Consulting Synapx Core...",
         "Refining creative strategy...",
         "Comparing information..."
@@ -51,8 +58,6 @@ const ChatArea: React.FC<ChatAreaProps> = ({ messages, onSendMessage, isLoading,
       thinking: [
         "Investigando posibilidades...",
         "Analizando competencia...",
-        "Cruzando datos de mercado...",
-        "Mapeando tendencias globales...",
         "Consultando Synapx Core...",
         "Refinando estrategia creativa...",
         "Comparando información..."
@@ -86,6 +91,12 @@ const ChatArea: React.FC<ChatAreaProps> = ({ messages, onSendMessage, isLoading,
     return statusMessages[loadingStage as keyof typeof statusMessages] || loadingStage;
   };
 
+  const handleSelectTemplate = (templateId: string) => {
+    const template = TEMPLATES.find(t => t.id === templateId);
+    onSendMessage(`Criar campanha usando o template "${template?.name}" para ${activeBrand?.name}`, undefined, { template_id: templateId });
+    setShowTemplates(false);
+  };
+
   const renderAsset = (asset: DesignAsset) => (
     <div key={asset.id} className="w-full sm:w-64 bg-black border border-white/5 rounded-3xl overflow-hidden shadow-2xl group animate-in zoom-in duration-300">
       <div className="aspect-square relative">
@@ -106,8 +117,8 @@ const ChatArea: React.FC<ChatAreaProps> = ({ messages, onSendMessage, isLoading,
   );
 
   return (
-    <div className="flex flex-col h-full bg-black">
-      <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-40 no-scrollbar">
+    <div className="flex flex-col h-full bg-black relative">
+      <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-60 no-scrollbar">
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[85%] rounded-[32px] p-6 ${m.role === 'user' ? 'bg-indigo-600 text-white shadow-xl' : 'bg-neutral-900 border border-white/5 text-neutral-200'}`}>
@@ -174,8 +185,53 @@ const ChatArea: React.FC<ChatAreaProps> = ({ messages, onSendMessage, isLoading,
         <div ref={endRef} />
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-black via-black to-transparent">
-        <form onSubmit={(e) => { e.preventDefault(); if(input.trim()) { onSendMessage(input); setInput(''); } }} className="max-w-4xl mx-auto">
+      {/* Templates Modal Overlay */}
+      {showTemplates && (
+        <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-50 p-8 flex flex-col">
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-2xl font-black text-white uppercase italic">Creative Templates</h2>
+            <button onClick={() => setShowTemplates(false)} className="text-2xl text-neutral-500 hover:text-white">×</button>
+          </div>
+          <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 no-scrollbar">
+            {TEMPLATES.map(t => (
+              <button 
+                key={t.id}
+                onClick={() => handleSelectTemplate(t.id)}
+                className="p-6 bg-neutral-900 border border-white/5 rounded-[32px] text-left hover:border-indigo-500 hover:bg-indigo-500/5 transition-all group"
+              >
+                <div className="text-2xl mb-4 opacity-50 group-hover:opacity-100 transition-opacity">
+                  {t.format === '1:1' ? '⬜' : t.format === '9:16' ? '📱' : '📺'}
+                </div>
+                <h3 className="text-sm font-black text-white uppercase mb-2">{t.name}</h3>
+                <p className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest">{t.category} • {t.format}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-black via-black/95 to-transparent flex flex-col gap-4">
+        {/* Quick Prompts */}
+        <div className="flex gap-2 overflow-x-auto no-scrollbar max-w-4xl mx-auto w-full pb-2">
+          <button 
+            onClick={() => setShowTemplates(true)}
+            className="whitespace-nowrap flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/20 rounded-full text-[10px] font-black uppercase tracking-widest text-white shadow-xl transition-all"
+          >
+            <span>📐</span> Templates
+          </button>
+          {quickPrompts.map((p, i) => (
+            <button 
+              key={i} 
+              onClick={() => onSendMessage(`${p[language === 'en' ? 'en' : 'pt']} para ${activeBrand?.name || 'minha marca'}`)}
+              className="whitespace-nowrap flex items-center gap-2 px-4 py-2 bg-neutral-900/50 hover:bg-indigo-600 border border-white/5 rounded-full text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-white transition-all backdrop-blur-md"
+            >
+              <span>{p.icon}</span>
+              {p[language === 'en' ? 'en' : 'pt']}
+            </button>
+          ))}
+        </div>
+
+        <form onSubmit={(e) => { e.preventDefault(); if(input.trim()) { onSendMessage(input); setInput(''); } }} className="max-w-4xl mx-auto w-full">
           <div className="relative group">
             <input 
               type="text" value={input} onChange={e => setInput(e.target.value)}

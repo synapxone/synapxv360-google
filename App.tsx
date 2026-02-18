@@ -8,6 +8,7 @@ import ChatArea from './components/ChatArea';
 import Workspace from './components/Workspace';
 import LandingPage from './components/LandingPage';
 import Auth from './components/Auth';
+import BrandManager from './components/BrandManager';
 
 export type LoadingStage = 'idle' | 'thinking' | 'briefing' | 'generating' | 'syncing';
 
@@ -19,12 +20,11 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState<LoadingStage>('idle');
-  const [activeTab, setActiveTab] = useState<'chat' | 'workspace'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'workspace' | 'brand'>('chat');
   const [assetQuantity, setAssetQuantity] = useState(1);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
 
-  // Contador para interromper processos antigos se uma nova mensagem for enviada
   const requestCounter = useRef(0);
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
@@ -44,18 +44,32 @@ const App: React.FC = () => {
     });
   }, []);
 
+  const handleUpdateBrand = async (brand: Brand) => {
+    if (!userProfile) return;
+    const { data } = await supabaseService.saveBrand(userProfile.id, brand);
+    if (data) {
+      setState(prev => ({ 
+        ...prev, 
+        brands: [data, ...prev.brands.filter(br => br.id !== data.id)], 
+        activeBrandId: data.id 
+      }));
+    }
+  };
+
+  const handleDeleteBrand = async (id: string) => {
+    await supabaseService.deleteBrand(id);
+    setState(prev => ({ 
+      ...prev, 
+      brands: prev.brands.filter(b => b.id !== id), 
+      activeBrandId: null 
+    }));
+  };
+
   const handleSendMessage = useCallback(async (content: string, image?: string, targetGroupId?: string) => {
     if (!userProfile) return;
-    
-    // Incrementa o contador para invalidar processos assíncronos em andamento
     const currentRequestId = ++requestCounter.current;
-    
     setIsMobileMenuOpen(false);
     
-    // Define o ID do grupo (pasta): 
-    // 1. Se veio do Workspace (targetGroupId), usa ele.
-    // 2. Se já estamos em uma conversa ativa (activeGroupId), mantém.
-    // 3. Caso contrário, cria um novo (nova pasta).
     const groupId = targetGroupId || activeGroupId || Date.now().toString();
     setActiveGroupId(groupId);
 
@@ -74,8 +88,6 @@ const App: React.FC = () => {
 
     try {
       const { text, sources } = await gemini.chat(content, image || null, messages, state, language);
-      
-      // Se uma nova mensagem foi enviada enquanto o Gemini pensava, interrompe aqui.
       if (currentRequestId !== requestCounter.current) return;
 
       let ideas: IdeaOption[] | undefined;
@@ -97,7 +109,6 @@ const App: React.FC = () => {
       if (briefMatch) {
         if (currentRequestId !== requestCounter.current) return;
         setLoadingStage('briefing');
-        
         const brief = JSON.parse(briefMatch[1]);
         const activeBrand = state.brands.find(b => b.id === state.activeBrandId);
         const brandCtx = activeBrand ? { colors: activeBrand.kit?.colors, tone: activeBrand.kit?.tone } : {};
@@ -108,21 +119,15 @@ const App: React.FC = () => {
         if (assetsMatch) {
           if (currentRequestId !== requestCounter.current) return;
           setLoadingStage('generating');
-          
           const rawAssets = JSON.parse(assetsMatch[1]);
           const baseAssets = Array.isArray(rawAssets) ? rawAssets : [rawAssets];
           const newAssets: DesignAsset[] = [];
           const assetIds: string[] = [];
-
-          // Mantém o título original da pasta se ela já existir
-          const existingAssetInGroup = state.assets.find(a => a.group_id === groupId);
-          const folderTitle = existingAssetInGroup?.group_title || content;
+          const folderTitle = state.assets.find(a => a.group_id === groupId)?.group_title || content;
 
           for (let i = 0; i < assetQuantity; i++) {
             for (const base of baseAssets) {
-              // Verifica a cada iteração de geração se o processo deve continuar
               if (currentRequestId !== requestCounter.current) return;
-              
               let url: any;
               if (brief.specialist_type === 'video') url = await gemini.generateVideo(base.prompt);
               else if (brief.specialist_type === 'music') url = await gemini.generateAudio(base.copy || base.prompt);
@@ -159,7 +164,6 @@ const App: React.FC = () => {
     } catch (e) { 
       console.error(e); 
     } finally { 
-      // Só limpa o loading se esta for a última requisição enviada
       if (currentRequestId === requestCounter.current) {
         setIsLoading(false); 
         setLoadingStage('idle'); 
@@ -183,6 +187,16 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteFolder = async (groupId: string) => {
+    if (!window.confirm("Deseja deletar permanentemente toda esta pasta e seus ativos?")) return;
+    await supabaseService.deleteAssetsByGroup(groupId);
+    setState(prev => ({ ...prev, assets: prev.assets.filter(a => a.group_id !== groupId) }));
+    setMessages(prev => prev.map(m => ({ ...m, attachedAssetIds: m.attachedAssetIds?.filter(aid => {
+      const asset = state.assets.find(a => a.id === aid);
+      return asset?.group_id !== groupId;
+    }) })));
+  };
+
   const handleRenameFolder = async (groupId: string, newTitle: string) => {
     await supabaseService.updateGroupTitle(groupId, newTitle);
     setState(prev => ({
@@ -193,29 +207,25 @@ const App: React.FC = () => {
 
   const handleRetakeConversation = (groupId: string, title: string) => {
     setActiveTab('chat');
-    setActiveGroupId(groupId); // Garante que novas mensagens caiam na mesma pasta
+    setActiveGroupId(groupId);
     handleSendMessage(`Vamos retomar o projeto na pasta "${title}". Qual o próximo passo?`, undefined, groupId);
   };
 
   if (viewMode === 'landing') return <LandingPage onStart={() => setViewMode('auth')} language={language} setLanguage={setLanguage} />;
   if (viewMode === 'auth') return <Auth language={language} />;
 
+  const activeBrand = state.brands.find(b => b.id === state.activeBrandId);
+
   return (
     <div className="flex h-screen bg-black overflow-hidden text-neutral-300">
       <Sidebar 
         state={state} 
         onSendMessage={handleSendMessage} 
-        onUpdateBrand={async (b) => {
-          const { data } = await supabaseService.saveBrand(userProfile!.id, b);
-          if (data) setState(prev => ({ ...prev, brands: [data, ...prev.brands.filter(br => br.id !== data.id)], activeBrandId: data.id }));
-        }} 
-        onDeleteBrand={async (id) => {
-          await supabaseService.deleteBrand(id);
-          setState(prev => ({ ...prev, brands: prev.brands.filter(b => b.id !== id), activeBrandId: null }));
-        }}
+        onUpdateBrand={handleUpdateBrand} 
+        onDeleteBrand={handleDeleteBrand}
         onSwitchBrand={(id) => {
           setState(p => ({ ...p, activeBrandId: id }));
-          setActiveGroupId(null); // Reseta a pasta ativa ao trocar de marca para evitar confusão
+          setActiveGroupId(null);
         }}
         language={language} 
         setLanguage={setLanguage} 
@@ -234,6 +244,7 @@ const App: React.FC = () => {
             <div className="flex bg-black/40 p-1 rounded-2xl border border-white/5">
               <button onClick={() => setActiveTab('chat')} className={`px-4 sm:px-6 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'chat' ? 'bg-indigo-600 text-white shadow-lg' : 'text-neutral-500'}`}>Chat</button>
               <button onClick={() => setActiveTab('workspace')} className={`px-4 sm:px-6 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'workspace' ? 'bg-indigo-600 text-white shadow-lg' : 'text-neutral-500'}`}>Biblioteca</button>
+              <button onClick={() => setActiveTab('brand')} className={`px-4 sm:px-6 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'brand' ? 'bg-indigo-600 text-white shadow-lg' : 'text-neutral-500'}`}>Brand</button>
             </div>
           </div>
 
@@ -260,8 +271,9 @@ const App: React.FC = () => {
               language={language}
               allAssets={state.assets}
               onAssetAction={handleAssetStatus}
+              activeBrand={activeBrand}
             />
-          ) : (
+          ) : activeTab === 'workspace' ? (
             <Workspace 
               state={state} 
               language={language} 
@@ -270,9 +282,21 @@ const App: React.FC = () => {
               onUpdateAssets={(assets) => setState(p => ({ ...p, assets }))}
               onSendMessage={handleRetakeConversation}
               onRenameFolder={handleRenameFolder}
+              onDeleteFolder={handleDeleteFolder}
               onAssetAction={handleAssetStatus}
               onExtendVideo={() => {}}
             />
+          ) : (
+            <div className="h-full bg-black overflow-hidden">
+              <BrandManager 
+                key={state.activeBrandId}
+                brand={activeBrand} 
+                language={language} 
+                onSave={handleUpdateBrand} 
+                onDelete={handleDeleteBrand}
+                isEmbedded={true}
+              />
+            </div>
           )}
         </div>
       </main>

@@ -17,6 +17,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpdateBrand, onDeleteBrand, onSwitchBrand, language, setLanguage, isMobileOpen }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [brandToEdit, setBrandToEdit] = useState<Brand | null>(null);
   const [isNewBrandModalOpen, setIsNewBrandModalOpen] = useState(false);
   
   const activeBrand = state.brands.find(b => b.id === state.activeBrandId);
@@ -71,18 +72,6 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
       );
     }
 
-    if (!activeBrand.kit.logoUrl && !activeBrand.kit.hasExistingLogo) {
-      return (
-        <button 
-          onClick={() => onSendMessage("Como Designer Senior, crie agora o logo oficial minimalista para minha marca ativa usando o motor Imagen 4.")}
-          className="w-full p-6 bg-neutral-900 border border-indigo-500/50 rounded-[28px] flex items-center justify-center gap-3 group transition-all hover:bg-neutral-800"
-        >
-          <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
-          <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">{t.finalizeKit}</span>
-        </button>
-      );
-    }
-
     return (
       <div className="space-y-3">
         {t.quick.map((action, i) => (
@@ -95,6 +84,14 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
             {(!isCollapsed || isMobileOpen) && <span className="text-[11px] font-black text-neutral-400 text-left leading-tight group-hover:text-white transition-colors">{action.label}</span>}
           </button>
         ))}
+        
+        <button 
+          onClick={() => setBrandToEdit(activeBrand)}
+          className={`mt-4 w-full flex items-center gap-4 p-4 bg-indigo-600/10 border border-indigo-500/20 rounded-[24px] transition-all group ${isCollapsed && !isMobileOpen ? 'lg:justify-center' : ''}`}
+        >
+          <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-xl shrink-0 group-hover:rotate-12 transition-transform shadow-2xl">🎨</div>
+          {(!isCollapsed || isMobileOpen) && <span className="text-[11px] font-black text-indigo-400 uppercase tracking-widest leading-tight">Ver Brand Book</span>}
+        </button>
       </div>
     );
   };
@@ -146,9 +143,17 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
                         {brand.name.charAt(0)}
                       </div>
                       {(!isCollapsed || isMobileOpen) && (
-                        <div className="text-left min-w-0 flex-1">
-                          <p className="text-xs font-black text-white truncate uppercase tracking-tighter">{brand.name}</p>
-                          <p className="text-[8px] text-neutral-600 font-mono truncate uppercase tracking-widest">{brand.kit?.concept || 'Market Authority'}</p>
+                        <div className="text-left min-w-0 flex-1 flex items-center justify-between">
+                          <div className="truncate">
+                            <p className="text-xs font-black text-white truncate uppercase tracking-tighter">{brand.name}</p>
+                            <p className="text-[8px] text-neutral-600 font-mono truncate uppercase tracking-widest">{brand.kit?.concept || 'Market Authority'}</p>
+                          </div>
+                          <div 
+                            onClick={(e) => { e.stopPropagation(); setBrandToEdit(brand); }}
+                            className="p-2 opacity-0 group-hover:opacity-100 hover:bg-white/10 rounded-lg transition-all text-neutral-400 hover:text-white"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                          </div>
                         </div>
                       )}
                     </button>
@@ -192,14 +197,17 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
           )}
         </div>
         
-        {isNewBrandModalOpen && (
+        {(isNewBrandModalOpen || brandToEdit) && (
           <BrandManager 
+            brand={brandToEdit || undefined}
             language={language} 
-            onClose={() => setIsNewBrandModalOpen(false)} 
+            onClose={() => { setIsNewBrandModalOpen(false); setBrandToEdit(null); }} 
             onSave={async (b) => { 
               await onUpdateBrand(b);
               setIsNewBrandModalOpen(false);
+              setBrandToEdit(null);
             }} 
+            onDelete={onDeleteBrand}
           />
         )}
       </div>

@@ -4,18 +4,31 @@ import { Brand, Language, BrandKit } from '../types';
 import { gemini } from '../services/geminiService';
 import { supabase, supabaseService } from '../services/supabaseService';
 
+// Fix: Move Container outside of the main component to avoid closure/inference issues with children props
+const Container: React.FC<{ children: React.ReactNode; isEmbedded?: boolean }> = ({ children, isEmbedded }) => {
+  if (isEmbedded) return <>{children}</>;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/95 backdrop-blur-2xl animate-in fade-in duration-300">
+      {children}
+    </div>
+  );
+};
+
 interface BrandManagerProps {
   brand?: Brand;
   language: Language;
   onSave: (brand: Brand) => Promise<void>;
-  onClose: () => void;
+  onClose?: () => void;
   onDelete?: (id: string) => void;
+  isEmbedded?: boolean;
 }
 
-const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, onClose, onDelete }) => {
+const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, onClose, onDelete, isEmbedded }) => {
   const [name, setName] = useState(brand?.name || '');
   const [website, setWebsite] = useState(brand?.website || '');
   const [instagram, setInstagram] = useState(brand?.instagram || '');
+  const [competitorWebsites, setCompetitorWebsites] = useState<string[]>(brand?.competitorWebsites || []);
+  const [newCompetitor, setNewCompetitor] = useState('');
   const [visualRefs, setVisualRefs] = useState<string[]>(brand?.visualReferences || []);
   const [userId, setUserId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState<string | null>(null);
@@ -42,6 +55,8 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
       name: "Nome da Marca",
       web: "Website",
       insta: "Instagram",
+      competitors: "Sites de Concorrentes",
+      addCompetitor: "Adicionar",
       refs: "Moodboard / Referências",
       identity: "Ativos de Identidade",
       logo: "Logo Principal",
@@ -64,6 +79,8 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
       name: "Brand Name",
       web: "Website",
       insta: "Instagram",
+      competitors: "Competitor Websites",
+      addCompetitor: "Add",
       refs: "Moodboard / References",
       identity: "Identity Assets",
       logo: "Main Logo",
@@ -88,7 +105,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
     setIsGenerating(true);
     setError(null);
     try {
-      const proposal = await gemini.generateBrandProposal(name, website, instagram, visualRefs);
+      const proposal = await gemini.generateBrandProposal(name, website, instagram, visualRefs, competitorWebsites);
       setKit(prev => ({
         ...proposal,
         logoUrl: prev.logoUrl || proposal.logoUrl,
@@ -101,6 +118,17 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const addCompetitor = () => {
+    if (newCompetitor && !competitorWebsites.includes(newCompetitor)) {
+      setCompetitorWebsites([...competitorWebsites, newCompetitor]);
+      setNewCompetitor('');
+    }
+  };
+
+  const removeCompetitor = (url: string) => {
+    setCompetitorWebsites(competitorWebsites.filter(c => c !== url));
   };
 
   const handleAssetUpload = async (type: 'logo' | 'symbol' | 'icon' | 'variation', e: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,7 +153,6 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
         setIsUploading(null);
       }
     } else {
-      // Fallback for new brands without ID yet or temporary preview
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
@@ -166,10 +193,11 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
         name,
         website,
         instagram,
+        competitorWebsites,
         visualReferences: visualRefs,
         kit: kit
       });
-      onClose();
+      if (onClose) onClose();
     } catch (err) {
       setError("Erro ao salvar. Tente novamente.");
     } finally {
@@ -210,25 +238,27 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
   );
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/95 backdrop-blur-2xl animate-in fade-in duration-300">
-      <div className="bg-neutral-900 border-t sm:border border-white/10 rounded-t-[32px] sm:rounded-[40px] w-full max-w-5xl h-[94vh] sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden shadow-2xl transition-all">
+    <Container isEmbedded={isEmbedded}>
+      <div className={`${isEmbedded ? 'w-full h-full' : 'bg-neutral-900 border-t sm:border border-white/10 rounded-t-[32px] sm:rounded-[40px] w-full max-w-5xl h-[94vh] sm:h-auto sm:max-h-[90vh] shadow-2xl'} flex flex-col overflow-hidden transition-all`}>
         
-        {/* Header */}
-        <div className="px-6 py-5 sm:px-10 border-b border-white/5 flex items-center justify-between shrink-0 bg-neutral-900/50 backdrop-blur-md">
-          <div className="min-w-0">
-            <h2 className="text-xl sm:text-3xl font-display font-black text-white tracking-tighter uppercase italic truncate">{t.title}</h2>
-            <p className="text-[9px] sm:text-xs text-neutral-500 font-bold tracking-widest uppercase mt-0.5">Identity Intelligence Hub</p>
+        {!isEmbedded && (
+          <div className="px-6 py-5 sm:px-10 border-b border-white/5 flex items-center justify-between shrink-0 bg-neutral-900/50 backdrop-blur-md">
+            <div className="min-w-0">
+              <h2 className="text-xl sm:text-3xl font-display font-black text-white tracking-tighter uppercase italic truncate">{t.title}</h2>
+              <p className="text-[9px] sm:text-xs text-neutral-500 font-bold tracking-widest uppercase mt-0.5">Identity Intelligence Hub</p>
+            </div>
+            {onClose && (
+              <button 
+                onClick={onClose} 
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full hover:bg-white/5 text-neutral-500 hover:text-white transition-all text-xl flex items-center justify-center"
+              >
+                ×
+              </button>
+            )}
           </div>
-          <button 
-            onClick={onClose} 
-            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full hover:bg-white/5 text-neutral-500 hover:text-white transition-all text-xl flex items-center justify-center"
-          >
-            ×
-          </button>
-        </div>
+        )}
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-12 no-scrollbar scroll-smooth">
+        <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-12 no-scrollbar scroll-smooth pb-40">
           {error && (
             <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-[10px] font-black uppercase tracking-[0.2em] text-center">
               {error}
@@ -236,7 +266,6 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            {/* Left: Input & Data */}
             <div className="space-y-10">
               <div className="space-y-6">
                 <div className="space-y-3">
@@ -266,9 +295,36 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
                     />
                   </div>
                 </div>
+
+                {/* COMPETITORS */}
+                <div className="space-y-3 pt-4 border-t border-white/5">
+                  <label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">{t.competitors}</label>
+                  <div className="flex gap-2">
+                    <input 
+                      value={newCompetitor} 
+                      onChange={e => setNewCompetitor(e.target.value)}
+                      onKeyPress={e => e.key === 'Enter' && (e.preventDefault(), addCompetitor())}
+                      className="flex-1 bg-black border border-neutral-800 rounded-xl py-3 px-4 text-xs text-white focus:border-indigo-500 transition-all outline-none"
+                      placeholder="https://concorrente.com"
+                    />
+                    <button 
+                      onClick={(e) => { e.preventDefault(); addCompetitor(); }}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all"
+                    >
+                      {t.addCompetitor}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {competitorWebsites.map((url, i) => (
+                      <div key={i} className="flex items-center gap-2 bg-neutral-800 border border-white/5 px-3 py-1.5 rounded-full text-[10px] text-neutral-300">
+                        <span className="truncate max-w-[150px]">{url}</span>
+                        <button onClick={() => removeCompetitor(url)} className="text-red-500 hover:text-red-400 font-bold ml-1">×</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
-              {/* IDENTITY ASSETS */}
               <div className="space-y-6 pt-6 border-t border-white/5">
                 <div className="flex items-center justify-between">
                   <h3 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{t.identity}</h3>
@@ -285,19 +341,6 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
                     </label>
                   </div>
                 </div>
-                {kit.logoVariations && kit.logoVariations.length > 0 && (
-                  <div className="grid grid-cols-5 gap-2 pt-2">
-                    {kit.logoVariations.map((v, i) => (
-                      <div key={i} className="relative aspect-square bg-black border border-neutral-800 rounded-lg overflow-hidden p-1 group">
-                        <img src={v} className="w-full h-full object-contain" />
-                        <button 
-                          onClick={() => setKit(prev => ({ ...prev, logoVariations: prev.logoVariations?.filter((_, idx) => idx !== i) }))}
-                          className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[8px] rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                        >×</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <div className="space-y-4 pt-6 border-t border-white/5">
@@ -326,25 +369,24 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
               </button>
             </div>
 
-            {/* Right: Creative Intelligence Preview */}
             <div className="bg-black/50 border border-white/5 rounded-[40px] p-8 sm:p-10 flex flex-col relative overflow-hidden group min-h-[400px]">
                {isGenerating ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6">
                   <div className="w-20 h-20 bg-neutral-900 rounded-3xl flex items-center justify-center text-4xl animate-pulse">📡</div>
                   <div className="space-y-2">
                     <p className="text-[10px] font-black text-white uppercase tracking-widest">Digital Twin Scanning</p>
-                    <p className="text-[10px] text-neutral-600 font-bold uppercase tracking-widest leading-relaxed max-w-[240px]">Escaneando site e redes sociais para atualizar seu BrandBook...</p>
+                    <p className="text-[10px] text-neutral-600 font-bold uppercase tracking-widest leading-relaxed max-w-[240px]">Analisando marca e concorrência para um BrandBook imbatível...</p>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-10 animate-in fade-in slide-in-from-right-4 duration-500">
                   <div className="space-y-2">
-                    <h3 className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em]">{t.concept}</h3>
-                    <p className="text-sm text-white font-medium italic leading-relaxed">"{kit.concept || 'Defina sua essência através do scan estratégico.'}"</p>
+                    <h3 className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">{t.concept}</h3>
+                    <p className="text-sm text-white font-medium italic leading-relaxed">"{kit.concept || 'Sua essência será destilada após o scan estratégico.'}"</p>
                   </div>
 
                   <div className="space-y-4">
-                    <h3 className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em]">{t.colors}</h3>
+                    <h3 className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">{t.colors}</h3>
                     <div className="grid grid-cols-3 sm:flex gap-3">
                       {Object.entries(kit.colors).map(([key, hex]) => (
                         <div key={key} className="flex-1 group/color relative min-w-0">
@@ -357,14 +399,14 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
 
                   <div className="grid grid-cols-2 gap-8">
                     <div className="space-y-3">
-                      <h3 className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em]">{t.typo}</h3>
+                      <h3 className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">{t.typo}</h3>
                       <div className="space-y-1">
                         <p className="text-lg text-white font-black truncate">{kit.typography.display}</p>
                         <p className="text-[8px] text-neutral-600 uppercase tracking-widest">Primary DNA</p>
                       </div>
                     </div>
                     <div className="space-y-3">
-                      <h3 className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em]">{t.tone}</h3>
+                      <h3 className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">{t.tone}</h3>
                       <div className="flex flex-wrap gap-2">
                         {kit.tone.length > 0 ? kit.tone.slice(0, 4).map((t, i) => (
                           <span key={i} className="px-2 py-1 bg-white/5 border border-white/5 rounded text-[8px] font-bold text-neutral-400 uppercase tracking-widest">{t}</span>
@@ -376,7 +418,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
                   {kit.logoUrl && (
                     <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center gap-4">
                       <span className="text-xl">✨</span>
-                      <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest leading-relaxed">Identidade Visual Ativa. Seus ativos estão prontos para produção.</p>
+                      <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest leading-relaxed">BrandBook Ativo. Concorrência mapeada. Pronto para dominar o mercado.</p>
                     </div>
                   )}
                 </div>
@@ -385,8 +427,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
           </div>
         </div>
 
-        {/* Footer Actions */}
-        <div className="px-6 py-5 sm:p-10 bg-neutral-950/80 border-t border-white/10 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className={`fixed bottom-0 ${isEmbedded ? 'left-0 right-0 lg:left-80' : 'left-0 right-0 sm:left-auto sm:right-auto sm:w-full sm:max-w-5xl'} px-6 py-5 sm:p-10 bg-neutral-950/80 border-t border-white/10 z-50 flex flex-col sm:flex-row items-center justify-between gap-4`}>
           <p className="hidden sm:block text-[9px] text-neutral-500 font-bold uppercase tracking-widest max-w-[300px] leading-relaxed italic">
             {t.approval}
           </p>
@@ -406,7 +447,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
           </div>
         </div>
       </div>
-    </div>
+    </Container>
   );
 };
 
