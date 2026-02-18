@@ -133,39 +133,56 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
 
   const handleAssetUpload = async (type: 'logo' | 'symbol' | 'icon' | 'variation', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    
+    if (!file || !kit) return;
+
+    // 1. Preview local imediato para UX — mostra a imagem na hora
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      setKit(prev => {
+        if (!prev) return prev;
+        if (type === 'logo') return { ...prev, logoUrl: base64 };
+        if (type === 'symbol') return { ...prev, symbolUrl: base64 };
+        if (type === 'icon') return { ...prev, iconUrl: base64 };
+        if (type === 'variation') return { ...prev, logoVariations: [...(prev.logoVariations || []), base64] };
+        return prev;
+      });
+    };
+    reader.readAsDataURL(file);
+
+    // 2. Upload real para Supabase Storage em paralelo
     setIsUploading(type);
-    if (userId && brand?.id && brand.id.includes('-')) {
-      try {
-        const publicUrl = await supabaseService.uploadBrandLogo(userId, brand.id, file);
+    try {
+      const ext = file.name.split('.').pop() || 'png';
+      const brandId = brand?.id || `new_${Date.now()}`;
+      const path = `brands/${brandId}/${type}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('brand-assets')
+        .upload(path, file, { upsert: true });
+
+      if (!uploadError) {
+        const { data } = supabase.storage
+          .from('brand-assets')
+          .getPublicUrl(path);
+
+        const publicUrl = data.publicUrl;
+
+        // Substituir o Base64 temporário pela URL pública permanente
         setKit(prev => {
+          if (!prev) return prev;
           if (type === 'logo') return { ...prev, logoUrl: publicUrl };
           if (type === 'symbol') return { ...prev, symbolUrl: publicUrl };
           if (type === 'icon') return { ...prev, iconUrl: publicUrl };
-          if (type === 'variation') return { ...prev, logoVariations: [...(prev.logoVariations || []), publicUrl] };
           return prev;
         });
-      } catch (err) {
-        console.error("Upload error", err);
-        setError("Erro no upload do arquivo.");
-      } finally {
-        setIsUploading(null);
+      } else {
+        console.warn('Storage upload falhou, mantendo Base64 como fallback:', uploadError.message);
       }
-    } else {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setKit(prev => {
-          if (type === 'logo') return { ...prev, logoUrl: result };
-          if (type === 'symbol') return { ...prev, symbolUrl: result };
-          if (type === 'icon') return { ...prev, iconUrl: result };
-          if (type === 'variation') return { ...prev, logoVariations: [...(prev.logoVariations || []), result] };
-          return prev;
-        });
-        setIsUploading(null);
-      };
-      reader.readAsDataURL(file);
+    } catch (err) {
+      console.warn('Upload para Storage falhou, usando Base64:', err);
+    } finally {
+      setIsUploading(null);
     }
   };
 
@@ -188,6 +205,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
     if (!name || isSaving) return;
     setIsSaving(true);
     setSaveSuccess(false);
+    setError(null);
     try {
       await onSave({
         id: brand?.id || Date.now().toString(),
@@ -200,9 +218,9 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
       });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-      if (onClose && !isEmbedded) onClose();
+      // ✅ NÃO chama onClose() aqui para manter o kit visível após o save
     } catch (err) {
-      setError("Erro ao salvar. Tente novamente.");
+      setError(t.error);
     } finally {
       setIsSaving(false);
     }

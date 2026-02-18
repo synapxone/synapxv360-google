@@ -29,19 +29,108 @@ const App: React.FC = () => {
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
 
+  // Função auxiliar para fundir assets do DB com legado sem duplicatas
+  const mergeAssets = (dbAssets: DesignAsset[], legacyAssets: DesignAsset[]) => {
+    // Assets do DB têm prioridade. Legado entra apenas se não houver asset no DB com mesmo ID (improvável, pois IDs mudam)
+    // Mas o principal é garantir que mostremos ambos.
+    // Legacy assets geralmente não têm UUID, então dificilmente colidem com DB assets.
+    return [...dbAssets, ...legacyAssets];
+  };
+
   useEffect(() => {
-    supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session) {
-        const profile = await supabaseService.getProfile(session.user.id);
-        setUserProfile(profile);
-        const brands = await supabaseService.getBrands(session.user.id);
-        const assets = await supabaseService.getAssets(session.user.id);
-        setState(prev => ({ ...prev, brands, assets, activeBrandId: brands[0]?.id || null }));
-        setViewMode('app');
+    const init = async () => {
+      const { data: { session: initialSession } } = await supabase.auth.getSession();
+      if (initialSession) {
+        const [profile, brands, assets, project] = await Promise.all([
+          supabaseService.getProfile(initialSession.user.id),
+          supabaseService.getBrands(initialSession.user.id),
+          supabaseService.getAssets(initialSession.user.id),
+          supabase.from('projects').select('*').eq('user_id', initialSession.user.id).maybeSingle()
+        ]);
+
+        if (profile) {
+          setUserProfile(profile);
+
+          // FALLBACK LOGIC: Se não houver marcas no DB (nova arquitetura), tenta carregar do JSON legado (antiga arquitetura)
+          const legacyBrands = (project?.data?.state_data?.brands || []) as Brand[];
+          const finalBrands = brands.length > 0 ? brands : legacyBrands;
+
+          const savedActiveBrandId = project?.data?.state_data?.activeBrandId;
+          // Garante que o ID ativo exista na lista final de marcas
+          const finalActiveBrandId = finalBrands.some(b => b.id === savedActiveBrandId)
+            ? savedActiveBrandId
+            : (finalBrands[0]?.id || null);
+
+          // MERGE LOGIC: DB + Legacy Assets
+          const legacyAssets = (project?.data?.state_data?.assets || []) as DesignAsset[];
+          const finalAssets = mergeAssets(assets, legacyAssets);
+
+          setState({ 
+            brands: finalBrands, 
+            activeBrandId: finalActiveBrandId, 
+            assets: finalAssets, 
+            brief: project?.data?.state_data?.brief || null 
+          });
+
+          if (project?.data?.message_history) {
+            setMessages(project.data.message_history.map((m: any) => ({
+              ...m,
+              timestamp: new Date(m.timestamp)
+            })));
+          }
+          setViewMode('app');
+        }
+      }
+    };
+    init();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      if (newSession) {
+        const [profile, brands, assets, project] = await Promise.all([
+          supabaseService.getProfile(newSession.user.id),
+          supabaseService.getBrands(newSession.user.id),
+          supabaseService.getAssets(newSession.user.id),
+          supabase.from('projects').select('*').eq('user_id', newSession.user.id).maybeSingle()
+        ]);
+
+        if (profile) {
+          setUserProfile(profile);
+
+          const legacyBrands = (project?.data?.state_data?.brands || []) as Brand[];
+          const finalBrands = brands.length > 0 ? brands : legacyBrands;
+
+          const savedActiveBrandId = project?.data?.state_data?.activeBrandId;
+          const finalActiveBrandId = finalBrands.some(b => b.id === savedActiveBrandId)
+            ? savedActiveBrandId
+            : (finalBrands[0]?.id || null);
+
+          const legacyAssets = (project?.data?.state_data?.assets || []) as DesignAsset[];
+          const finalAssets = mergeAssets(assets, legacyAssets);
+
+          setState({ 
+            brands: finalBrands, 
+            activeBrandId: finalActiveBrandId, 
+            assets: finalAssets, 
+            brief: project?.data?.state_data?.brief || null 
+          });
+
+          if (project?.data?.message_history) {
+            setMessages(project.data.message_history.map((m: any) => ({
+              ...m,
+              timestamp: new Date(m.timestamp)
+            })));
+          }
+          setViewMode('app');
+        }
       } else {
         setViewMode('landing');
+        setUserProfile(null);
+        setState({ brands: [], activeBrandId: null, assets: [], brief: null });
+        setMessages([]);
       }
     });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleUpdateBrand = async (brand: Brand) => {
@@ -50,32 +139,58 @@ const App: React.FC = () => {
       const { data, error } = await supabaseService.saveBrand(userProfile.id, brand);
       if (error) {
         console.error("Save brand error:", error);
-        alert(`Erro ao salvar marca: ${error.message}`);
+        alert(`Erro ao salvar marca: ${error.message}. Verifique se a tabela 'brands' existe no Supabase.`);
         return;
       }
       if (data) {
         setState(prev => {
-          const filtered = prev.brands.filter(br => br.id !== data.id && br.id !== brand.id);
+          // Detecta se houve migração de ID (Legado -> DB)
+          const isMigration = brand.id !== data.id;
+          
+          const filteredBrands = prev.brands.filter(br => br.id !== data.id && br.id !== brand.id);
+          
+          // Se houve migração de Marca, migrar também os Assets associados para o novo ID
+          let updatedAssets = prev.assets;
+          if (isMigration) {
+            updatedAssets = prev.assets.map(a => 
+              a.brand_id === brand.id ? { ...a, brand_id: data.id } : a
+            );
+            
+            // Background Sync: Salvar assets migrados no DB para persistir a mudança
+            updatedAssets.forEach(async (asset) => {
+              if (asset.brand_id === data.id) {
+                 // Salva silenciosamente para migrar para a tabela 'assets'
+                 await supabaseService.saveAsset(userProfile.id, asset);
+              }
+            });
+          }
+
           return { 
             ...prev, 
-            brands: [data, ...filtered], 
-            activeBrandId: data.id 
+            brands: [data, ...filteredBrands], 
+            activeBrandId: data.id,
+            assets: updatedAssets
           };
         });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Critical handleUpdateBrand error:", err);
+      alert(`Erro crítico: ${err.message}`);
     }
   };
 
   const handleDeleteBrand = async (id: string) => {
     if (!window.confirm("Deseja deletar esta marca?")) return;
     await supabaseService.deleteBrand(id);
-    setState(prev => ({ 
-      ...prev, 
-      brands: prev.brands.filter(b => b.id !== id), 
-      activeBrandId: prev.activeBrandId === id ? null : prev.activeBrandId 
-    }));
+    
+    setState(prev => {
+      const newBrands = prev.brands.filter(b => b.id !== id);
+      return { 
+        ...prev, 
+        brands: newBrands, 
+        activeBrandId: prev.activeBrandId === id ? (newBrands[0]?.id || null) : prev.activeBrandId 
+      };
+    });
   };
 
   const handleSendMessage = useCallback(async (content: string, image?: string, targetGroupId?: string) => {

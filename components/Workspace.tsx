@@ -194,15 +194,15 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onUpdateAssets, onSendMess
                   autoFocus
                 />
                 <button 
-                  onClick={async () => { await onRenameFolder(selectedFolder, newFolderName); setIsRenaming(false); }}
+                  onClick={async () => { await onRenameFolder(selectedFolder!, newFolderName); setIsRenaming(false); }}
                   className="p-2 bg-green-500 rounded-xl text-white"
                 >✓</button>
                 <button onClick={() => setIsRenaming(false)} className="p-2 bg-neutral-800 rounded-xl text-white">×</button>
               </div>
             ) : (
               <div className="flex items-center gap-3">
-                <h3 className="text-lg font-black text-white uppercase italic tracking-tighter">{currentFolder?.title}</h3>
-                <button onClick={() => setIsRenaming(true)} className="text-neutral-600 hover:text-indigo-500 transition-colors">✏️</button>
+                <h3 className="text-lg font-black text-white uppercase italic tracking-tighter">{currentFolder?.title || 'Pasta Indisponível'}</h3>
+                {currentFolder && <button onClick={() => setIsRenaming(true)} className="text-neutral-600 hover:text-indigo-500 transition-colors">✏️</button>}
               </div>
             )}
             <p className="text-[10px] font-black text-neutral-600 uppercase tracking-widest mt-1">Biblioteca ativa do projeto.</p>
@@ -210,14 +210,16 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onUpdateAssets, onSendMess
         </div>
         <div className="flex gap-4">
           <button 
-            onClick={() => onDeleteFolder(selectedFolder)}
-            className="px-6 py-3 bg-red-500/10 text-red-500 border border-red-500/20 text-[10px] font-black rounded-2xl uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-xl"
+            onClick={() => selectedFolder && onDeleteFolder(selectedFolder)}
+            disabled={!selectedFolder}
+            className="px-6 py-3 bg-red-500/10 text-red-500 border border-red-500/20 text-[10px] font-black rounded-2xl uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-xl disabled:opacity-50"
           >
             Excluir Pasta
           </button>
           <button 
-            onClick={() => onSendMessage(currentFolder!.id, currentFolder!.title)}
-            className="px-6 py-3 bg-white text-black text-[10px] font-black rounded-2xl uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all shadow-xl"
+            onClick={() => currentFolder && onSendMessage(currentFolder.id, currentFolder.title)}
+            disabled={!currentFolder}
+            className="px-6 py-3 bg-white text-black text-[10px] font-black rounded-2xl uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all shadow-xl disabled:opacity-50"
           >
             Retomar Conversa
           </button>
