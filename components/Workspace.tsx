@@ -4,6 +4,7 @@ import { CampaignState, DesignAsset, Brand, Language } from '../types';
 import { composeImageWithLogo, LogoOverlayOptions } from '../utils/imageCompose';
 import { supabaseService } from '../services/supabaseService';
 import AssetEditor from './AssetEditor';
+import AdsPreview from './AdsPreview';
 
 interface WorkspaceProps {
   state: CampaignState;
@@ -25,6 +26,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onUpdateAssets, onSendMess
   const [isRenaming, setIsRenaming] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [editingAsset, setEditingAsset] = useState<DesignAsset | null>(null);
+  const [previewAsset, setPreviewAsset] = useState<DesignAsset | null>(null);
   
   const [logoConfig, setLogoConfig] = useState<{assetId: string | null, position: LogoOverlayOptions['position']}>({
     assetId: null,
@@ -237,18 +239,23 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onUpdateAssets, onSendMess
                  </div>
                )}
 
-               <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center gap-3 p-6 backdrop-blur-sm">
+               <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center gap-2 p-6 backdrop-blur-sm">
                   <div className="flex w-full gap-2">
-                    <button onClick={() => onAssetAction(asset.id, 'approved')} className="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Aprovar</button>
-                    <button onClick={() => handleToggleTopPerformer(asset)} className={`flex-1 py-3 border text-[10px] font-black rounded-xl uppercase tracking-widest transition-all ${asset.performance?.feedback === 'top_performer' ? 'bg-yellow-500 text-black border-yellow-400' : 'bg-white/10 text-white border-white/20'}`}>
+                    <button onClick={() => onAssetAction(asset.id, 'approved')} className="flex-1 py-2.5 bg-green-600 hover:bg-green-500 text-white text-[9px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Aprovar</button>
+                    <button onClick={() => handleToggleTopPerformer(asset)} className={`flex-1 py-2.5 border text-[9px] font-black rounded-xl uppercase tracking-widest transition-all ${asset.performance?.feedback === 'top_performer' ? 'bg-yellow-500 text-black border-yellow-400' : 'bg-white/10 text-white border-white/20'}`}>
                       {asset.performance?.feedback === 'top_performer' ? 'Remover Top' : '⭐ Top'}
                     </button>
                   </div>
                   
-                  <button onClick={() => setEditingAsset(asset)} className="w-full py-3 bg-indigo-600 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Editar</button>
+                  <div className="flex w-full gap-2">
+                    <button onClick={() => setEditingAsset(asset)} className="flex-1 py-2.5 bg-indigo-600 text-white text-[9px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Editar</button>
+                    {(asset.imageUrl || asset.videoUrl) && (
+                      <button onClick={() => setPreviewAsset(asset)} className="flex-1 py-2.5 bg-white/20 text-white text-[9px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all border border-white/30 backdrop-blur-md">Ads Preview</button>
+                    )}
+                  </div>
                   
-                  <button onClick={() => handleDownload(asset, false)} className="w-full py-3 bg-white text-black hover:bg-indigo-600 hover:text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Baixar</button>
-                  <button onClick={() => onAssetAction(asset.id, 'rejected')} className="w-full py-3 bg-red-600 hover:bg-red-500 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Excluir</button>
+                  <button onClick={() => handleDownload(asset, false)} className="w-full py-2.5 bg-white text-black hover:bg-indigo-600 hover:text-white text-[9px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Baixar</button>
+                  <button onClick={() => onAssetAction(asset.id, 'rejected')} className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white text-[9px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Excluir</button>
                </div>
 
                <div className="absolute top-4 right-4 z-10">
@@ -275,6 +282,15 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onUpdateAssets, onSendMess
             const newAssets = state.assets.map(a => a.id === updated.id ? updated : a);
             onUpdateAssets(newAssets);
           }}
+        />
+      )}
+
+      {previewAsset && activeBrand && (
+        <AdsPreview 
+          asset={previewAsset}
+          brand={activeBrand}
+          language={language}
+          onClose={() => setPreviewAsset(null)}
         />
       )}
     </div>

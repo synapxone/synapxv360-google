@@ -8,17 +8,18 @@ import { composeImageWithLogo, LogoOverlayOptions } from '../utils/imageCompose'
 interface AssetEditorProps {
   asset: DesignAsset;
   brand: Brand;
+  userId: string;
   language: Language;
   onClose: () => void;
   onSave: (updatedAsset: DesignAsset) => void;
 }
 
-const AssetEditor: React.FC<AssetEditorProps> = ({ asset, brand, language, onClose, onSave }) => {
+const AssetEditor: React.FC<AssetEditorProps> = ({ asset, brand, userId, language, onClose, onSave }) => {
   const [activeTab, setActiveTab] = useState<'copy' | 'image' | 'composition'>('copy');
   const [copy, setCopy] = useState(asset.copy || '');
   const [prompt, setPrompt] = useState(asset.prompt || '');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [intensity, setIntensity] = useState(50); // 0 = Subtle, 100 = Bold
+  const [intensity, setIntensity] = useState(50);
   
   const [logoOptions, setLogoOptions] = useState<LogoOverlayOptions>({
     position: 'bottom-right',
@@ -50,6 +51,8 @@ const AssetEditor: React.FC<AssetEditorProps> = ({ asset, brand, language, onClo
         const data = JSON.parse(match[1]);
         setCopy(data[0].copy);
       }
+    } catch (e) {
+      console.error(e);
     } finally {
       setIsProcessing(false);
     }
@@ -63,7 +66,11 @@ const AssetEditor: React.FC<AssetEditorProps> = ({ asset, brand, language, onClo
     
     try {
       const newUrl = await gemini.generateImage(finalPrompt, JSON.stringify(brand.kit?.colors));
-      onSave({ ...asset, imageUrl: newUrl, prompt: finalPrompt });
+      const updated = { ...asset, imageUrl: newUrl, prompt: finalPrompt };
+      const { data } = await supabaseService.saveAsset(userId, updated);
+      if (data) onSave(data);
+    } catch (e) {
+      console.error(e);
     } finally {
       setIsProcessing(false);
     }
@@ -71,10 +78,18 @@ const AssetEditor: React.FC<AssetEditorProps> = ({ asset, brand, language, onClo
 
   const handleSaveAll = async () => {
     setIsProcessing(true);
-    const updated = { ...asset, copy, prompt };
-    await supabaseService.saveAsset('current-user', updated); // User ID handling would be through auth state in real app
-    onSave(updated);
-    onClose();
+    try {
+      const updated = { ...asset, copy, prompt };
+      const { data, error } = await supabaseService.saveAsset(userId, updated);
+      if (error) throw error;
+      if (data) onSave(data);
+      onClose();
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao salvar alterações.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (

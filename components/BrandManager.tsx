@@ -4,7 +4,6 @@ import { Brand, Language, BrandKit } from '../types';
 import { gemini } from '../services/geminiService';
 import { supabase, supabaseService } from '../services/supabaseService';
 
-// Fix: Move Container outside of the main component to avoid closure/inference issues with children props
 const Container: React.FC<{ children: React.ReactNode; isEmbedded?: boolean }> = ({ children, isEmbedded }) => {
   if (isEmbedded) return <>{children}</>;
   return (
@@ -32,6 +31,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
   const [visualRefs, setVisualRefs] = useState<string[]>(brand?.visualReferences || []);
   const [userId, setUserId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   
   const [kit, setKit] = useState<BrandKit>(brand?.kit || {
     name: brand?.name || '',
@@ -64,7 +64,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
       icon: "Ícone",
       variations: "Variações",
       aiBtn: isGenerating ? "ANALISANDO..." : (brand?.kit ? "RE-SCAN ESTRATÉGICO" : "SCAN & BUILD"),
-      save: isSaving ? "SINCRONIZANDO..." : "SALVAR BRANDBOOK",
+      save: isSaving ? "SINCRONIZANDO..." : (saveSuccess ? "SALVO COM SUCESSO! ✓" : "SALVAR BRANDBOOK"),
       delete: "EXCLUIR MARCA",
       concept: "Posicionamento",
       colors: "Paleta Identificada",
@@ -88,7 +88,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
       icon: "Icon",
       variations: "Variations",
       aiBtn: isGenerating ? "SCANNING..." : (brand?.kit ? "STRATEGIC RE-SCAN" : "SCAN & BUILD"),
-      save: isSaving ? "SYNCING..." : "SAVE BRANDBOOK",
+      save: isSaving ? "SYNCING..." : (saveSuccess ? "SAVED SUCCESSFULLY! ✓" : "SAVE BRANDBOOK"),
       delete: "DELETE BRAND",
       concept: "Positioning",
       colors: "Identified Palette",
@@ -187,6 +187,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
   const handleSave = async () => {
     if (!name || isSaving) return;
     setIsSaving(true);
+    setSaveSuccess(false);
     try {
       await onSave({
         id: brand?.id || Date.now().toString(),
@@ -197,7 +198,9 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
         visualReferences: visualRefs,
         kit: kit
       });
-      if (onClose) onClose();
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      if (onClose && !isEmbedded) onClose();
     } catch (err) {
       setError("Erro ao salvar. Tente novamente.");
     } finally {
@@ -440,7 +443,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
             <button 
               onClick={handleSave} 
               disabled={isSaving || !name}
-              className="flex-[2] sm:flex-none px-12 py-5 bg-white hover:bg-indigo-600 text-black hover:text-white font-black rounded-2xl shadow-2xl transition-all active:scale-95 disabled:opacity-10 uppercase text-[10px] tracking-widest"
+              className={`flex-[2] sm:flex-none px-12 py-5 font-black rounded-2xl shadow-2xl transition-all active:scale-95 disabled:opacity-10 uppercase text-[10px] tracking-widest ${saveSuccess ? 'bg-green-500 text-white' : 'bg-white text-black hover:bg-indigo-600 hover:text-white'}`}
             >
               {t.save}
             </button>

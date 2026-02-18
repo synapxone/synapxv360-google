@@ -1,3 +1,4 @@
+**🚨 REGRA DE OURO: NUNCA sobrescreva este arquivo. SEMPRE acrescente ao histórico. Se uma seção precisar ser atualizada, atualize APENAS aquela seção.**
 
 # PROJECT DOCUMENTATION
 
@@ -13,6 +14,7 @@ synapx Agency é uma plataforma de marketing full-service alimentada por IA (Gem
   - Audio: Gemini 2.5 Flash TTS.
 
 ## DECISÕES TÉCNICAS IMPORTANTES
+- **Ads Preview (v376)**: Novo módulo de visualização que permite testar os ativos em mockups de Instagram, LinkedIn e Facebook com suporte a modo noturno e preenchimento automático de metadados da marca.
 - **Loop de Performance (v372)**: Introdução do feedback `top_performer` nos ativos. A IA agora lê os prompts de maior engajamento antes de gerar novos ativos para manter a consistência do "DNA vencedor".
 - **Templates Base (v372)**: Catálogo de 8 composições estruturadas que injetam diretrizes de hierarquia visual e copywriting de agências boutique diretamente nos prompts dos especialistas.
 - **Asset Editor (v372)**: Painel lateral slide-in que permite ajustes finos pós-geração, regeneração parcial de imagem e controle granular de composição de marca d'água.
@@ -20,6 +22,17 @@ synapx Agency é uma plataforma de marketing full-service alimentada por IA (Gem
 - **Análise de Concorrência**: Introdução do campo `competitorWebsites` para diferenciação estratégica.
 
 ## HISTÓRICO DE IMPLEMENTAÇÕES
+### 2024-05-23 — Ads Preview v376
+**O que foi feito:**
+- ✅ **Ads Preview Engine**: Lançamento do componente `AdsPreview.tsx` com mockups realistas.
+- ✅ **Context Injection**: Preenchimento automático de Logo, Copy e Nome da Marca nos mockups de anúncio.
+- ✅ **Multi-Placement Support**: Suporte para Feed e Stories com detecção automática de formato.
+
+### 2024-05-22 — UX Master & Agentic Learning (v375)
+**O que foi feito:**
+- Atalhos de comandos rápidos no chat.
+- Exclusão de pastas na Biblioteca.
+
 ### 2024-05-22 — Upgrade Visual Omneky-Level (v372)
 **O que foi feito:**
 - ✅ **Performance Loop**: Novo campo `performance` no `DesignAsset`. IA orquestradora injeta contexto de sucessos passados.
@@ -27,12 +40,8 @@ synapx Agency é uma plataforma de marketing full-service alimentada por IA (Gem
 - ✅ **Templates Base**: Catálogo de 8 templates mestre com injeção de prompt estruturado.
 - ✅ **UI Updates**: Badge dourado para Top Performers e botão de Templates no chat.
 
-### 2024-05-22 — UX Master & Agentic Learning (v375)
-**O que foi feito:**
-- Atalhos de comandos rápidos no chat.
-- Exclusão de pastas na Biblioteca.
-
 ## ESTADO ATUAL DO PROJETO
+- Visualização de anúncios em contexto real ✅
 - Ativos com memória de performance ✅
 - Edição inline de assets ✅
 - Templates profissionais ✅
@@ -60,3 +69,37 @@ synapx Agency é uma plataforma de marketing full-service alimentada por IA (Gem
 
 ## PROBLEMAS CONHECIDOS
 - Latência na geração de vídeos com Veo 3.1 (~30s a 1min).
+
+---
+### 2024-05-23 — Golden Rule Enforcement (v377)
+**O que foi feito:**
+- Adição da Regra de Ouro em negrito no topo do arquivo.
+- Manutenção do histórico de versões.
+
+---
+### 2024-05-23 — Brand Persistence Fix (v378)
+**O que foi feito:**
+- ✅ **Sincronização Bidirecional**: Implementação de mapeamento rigoroso entre snake_case (DB) e camelCase (App) no `supabaseService`.
+- ✅ **Feedback de UI**: Botão de salvar agora exibe estado de sucesso e erro.
+- ✅ **Correção de ID**: Garantia de que novas marcas recebam UUIDs válidos gerados pelo banco de dados.
+
+---
+### 2024-05-23 — Agency Core Stability (v379)
+**O que foi feito:**
+- ✅ **Correção Crítica de ID**: Vinculação correta do `userId` no `AssetEditor`.
+- ✅ **Áudio Playback Fix**: Implementado utilitário `pcmToWav` para tornar o áudio do Gemini TTS compatível com tags `<audio>`.
+- ✅ **Veo Extension**: Ativada funcionalidade de estender vídeos em 7s adicionais.
+- ✅ **Mapping Consistency**: Garantia de que salvamentos de assets retornem objetos camelCase.
+
+**Arquivos modificados:**
+- `services/geminiService.ts` — PCM to WAV e Video Extension.
+- `services/supabaseService.ts` — Mapeamento de retorno no saveAsset.
+- `components/AssetEditor.tsx` — Fix de prop userId.
+- `App.tsx` — Lógica de extensão de vídeo.
+
+**Decisões técnicas:**
+- Uso de cabeçalho RIFF/WAV para envolver os bytes PCM brutos, evitando a complexidade da Live API para assets estáticos.
+
+**Estado atual:**
+- ✅ Funciona: Edição de assets sem erros de auth, playback de áudio e extensão de vídeo.
+---

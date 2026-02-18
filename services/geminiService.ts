@@ -107,6 +107,66 @@ export class GeminiService {
     return { text: response.text || '', sources };
   }
 
+  // Corrigido: Implementado o método generateBrandProposal solicitado em BrandManager.tsx
+  async generateBrandProposal(name: string, website?: string, instagram?: string, visualRefs?: string[], competitorWebsites?: string[]) {
+    const ai = this.getClient();
+    const prompt = `
+      Analise a marca "${name}" e forneça uma proposta de identidade visual completa (Brand Kit).
+      Website fornecido: ${website || 'Nenhum'}
+      Instagram: ${instagram || 'Nenhum'}
+      Referências visuais: ${visualRefs?.length || 0} imagens.
+      Concorrentes: ${competitorWebsites?.join(', ') || 'Não informados'}
+      
+      Sua tarefa é extrair o DNA da marca ou propor um novo posicionamento estratégico imbatível.
+      Retorne APENAS um objeto JSON válido seguindo estritamente o esquema de BrandKit definido nas regras.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            concept: { type: Type.STRING },
+            tone: { type: Type.ARRAY, items: { type: Type.STRING } },
+            colors: {
+              type: Type.OBJECT,
+              properties: {
+                primary: { type: Type.STRING },
+                secondary: { type: Type.STRING },
+                accent: { type: Type.STRING },
+                neutralLight: { type: Type.STRING },
+                neutralDark: { type: Type.STRING },
+              },
+              required: ['primary', 'secondary', 'accent', 'neutralLight', 'neutralDark']
+            },
+            typography: {
+              type: Type.OBJECT,
+              properties: {
+                display: { type: Type.STRING },
+                body: { type: Type.STRING },
+                mono: { type: Type.STRING },
+              },
+              required: ['display', 'body', 'mono']
+            }
+          },
+          required: ['name', 'concept', 'tone', 'colors', 'typography']
+        }
+      }
+    });
+
+    try {
+      return JSON.parse(response.text || '{}');
+    } catch (e) {
+      console.error("Failed to parse brand proposal:", e);
+      throw e;
+    }
+  }
+
   async runSpecialist(brief: any, brandContext: any) {
     const ai = this.getClient();
     const baseInstruction = SPECIALISTS[brief.specialist_type] || SPECIALISTS.social;
@@ -186,6 +246,33 @@ export class GeminiService {
     }
   }
 
+  async extendVideo(previousVideoMetadata: any, prompt: string) {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    try {
+      let operation = await ai.models.generateVideos({
+        model: 'veo-3.1-generate-preview',
+        prompt,
+        video: previousVideoMetadata,
+        config: {
+          numberOfVideos: 1,
+          resolution: '720p',
+          aspectRatio: '16:9'
+        }
+      });
+      while (!operation.done) {
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        operation = await ai.operations.getVideosOperation({ operation });
+      }
+      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+      const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+      const blob = await response.blob();
+      return { url: URL.createObjectURL(blob), metadata: operation.response?.generatedVideos?.[0]?.video };
+    } catch (e) {
+      console.error("Video extension error:", e);
+      return null;
+    }
+  }
+
   async generateAudio(text: string) {
     const ai = this.getClient();
     try {
@@ -193,7 +280,7 @@ export class GeminiService {
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text }] }],
         config: {
-          responseModalities: [Modality.AUDIO],
+          responseModalalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: { voiceName: 'Kore' }
@@ -201,58 +288,55 @@ export class GeminiService {
           },
         },
       });
-      return `data:audio/pcm;base64,${response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data}`;
+      const base64Pcm = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (!base64Pcm) return null;
+      
+      // Converte PCM para WAV para compatibilidade com navegadores
+      const wavBase64 = this.pcmToWav(base64Pcm, 24000);
+      return `data:audio/wav;base64,${wavBase64}`;
     } catch (e) {
       console.error("Audio generation error:", e);
       return null;
     }
   }
 
-  async generateBrandProposal(name: string, website?: string, instagram?: string, visualRefs?: string[], competitorWebsites?: string[]): Promise<BrandKit> {
-    const ai = this.getClient();
-    const prompt = `Analise a marca "${name}". Website: ${website || 'N/A'}. Instagram: ${instagram || 'N/A'}. Referências visuais: ${visualRefs?.length || 0} imagens fornecidas. Concorrentes: ${competitorWebsites?.join(', ') || 'Nenhum'}.
-    Crie uma proposta de Brand Kit completa e profissional seguindo a interface BrandKit. Compare a marca com os concorrentes listados para encontrar um diferencial competitivo (UVSP) e posicione-a acima deles.`;
-    
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: {
-        systemInstruction: "Você é um especialista em branding de luxo e estrategista de mercado. Retorne um JSON que siga a interface BrandKit: { name, concept, tone: string[], colors: { primary, secondary, accent, neutralLight, neutralDark }, typography: { display, body, mono } }. Analise a concorrência para definir o diferencial estratégico.",
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            name: { type: Type.STRING },
-            concept: { type: Type.STRING },
-            tone: { type: Type.ARRAY, items: { type: Type.STRING } },
-            colors: {
-              type: Type.OBJECT,
-              properties: {
-                primary: { type: Type.STRING },
-                secondary: { type: Type.STRING },
-                accent: { type: Type.STRING },
-                neutralLight: { type: Type.STRING },
-                neutralDark: { type: Type.STRING }
-              },
-              required: ['primary', 'secondary', 'accent', 'neutralLight', 'neutralDark']
-            },
-            typography: {
-              type: Type.OBJECT,
-              properties: {
-                display: { type: Type.STRING },
-                body: { type: Type.STRING },
-                mono: { type: Type.STRING }
-              },
-              required: ['display', 'body', 'mono']
-            }
-          },
-          required: ['name', 'concept', 'tone', 'colors', 'typography']
-        }
-      }
-    });
+  private pcmToWav(base64Pcm: string, sampleRate: number): string {
+    const binary = atob(base64Pcm);
+    const len = binary.length;
+    const buffer = new ArrayBuffer(44 + len);
+    const view = new DataView(buffer);
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
 
-    const json = JSON.parse(response.text || '{}');
-    return json as BrandKit;
+    const writeString = (offset: number, string: string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, 32 + len, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, 1, true); // Mono
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, len, true);
+
+    const pcmData = new Uint8Array(buffer, 44);
+    pcmData.set(bytes);
+
+    let output = '';
+    const outputBytes = new Uint8Array(buffer);
+    for (let i = 0; i < outputBytes.byteLength; i++) {
+      output += String.fromCharCode(outputBytes[i]);
+    }
+    return btoa(output);
   }
 }
 

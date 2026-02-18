@@ -46,22 +46,35 @@ const App: React.FC = () => {
 
   const handleUpdateBrand = async (brand: Brand) => {
     if (!userProfile) return;
-    const { data } = await supabaseService.saveBrand(userProfile.id, brand);
-    if (data) {
-      setState(prev => ({ 
-        ...prev, 
-        brands: [data, ...prev.brands.filter(br => br.id !== data.id)], 
-        activeBrandId: data.id 
-      }));
+    try {
+      const { data, error } = await supabaseService.saveBrand(userProfile.id, brand);
+      if (error) {
+        console.error("Save brand error:", error);
+        alert(`Erro ao salvar marca: ${error.message}`);
+        return;
+      }
+      if (data) {
+        setState(prev => {
+          const filtered = prev.brands.filter(br => br.id !== data.id && br.id !== brand.id);
+          return { 
+            ...prev, 
+            brands: [data, ...filtered], 
+            activeBrandId: data.id 
+          };
+        });
+      }
+    } catch (err) {
+      console.error("Critical handleUpdateBrand error:", err);
     }
   };
 
   const handleDeleteBrand = async (id: string) => {
+    if (!window.confirm("Deseja deletar esta marca?")) return;
     await supabaseService.deleteBrand(id);
     setState(prev => ({ 
       ...prev, 
       brands: prev.brands.filter(b => b.id !== id), 
-      activeBrandId: null 
+      activeBrandId: prev.activeBrandId === id ? null : prev.activeBrandId 
     }));
   };
 
@@ -147,12 +160,13 @@ const App: React.FC = () => {
                 prompt: base.prompt,
                 copy: base.copy,
                 description: base.description || '',
-                status: 'pending'
+                status: 'pending',
+                metadata: url?.metadata
               };
 
               const { data: saved } = await supabaseService.saveAsset(userProfile.id, asset);
               if (saved) {
-                newAssets.push({ ...asset, id: saved.id });
+                newAssets.push(saved);
                 assetIds.push(saved.id);
               }
             }
@@ -184,6 +198,32 @@ const App: React.FC = () => {
         await supabaseService.saveAsset(userProfile!.id, newAsset);
         setState(prev => ({ ...prev, assets: prev.assets.map(a => a.id === id ? newAsset : a) }));
       }
+    }
+  };
+
+  const handleExtendVideo = async (asset: DesignAsset, prompt: string) => {
+    if (!userProfile || !asset.metadata) return;
+    setIsLoading(true);
+    setLoadingStage('generating');
+    try {
+      const url: any = await gemini.extendVideo(asset.metadata, prompt);
+      if (url) {
+        const newAsset: DesignAsset = {
+          ...asset,
+          id: Math.random().toString(36).substr(2, 9),
+          name: `${asset.name} (Extended)`,
+          videoUrl: url.url,
+          metadata: url.metadata,
+          created_at: new Date().toISOString()
+        };
+        const { data: saved } = await supabaseService.saveAsset(userProfile.id, newAsset);
+        if (saved) {
+          setState(prev => ({ ...prev, assets: [saved, ...prev.assets] }));
+        }
+      }
+    } finally {
+      setIsLoading(false);
+      setLoadingStage('idle');
     }
   };
 
@@ -277,14 +317,14 @@ const App: React.FC = () => {
             <Workspace 
               state={state} 
               language={language} 
-              onUpdateBrand={async (b) => {}} 
-              onDeleteBrand={() => {}} 
+              onUpdateBrand={handleUpdateBrand} 
+              onDeleteBrand={handleDeleteBrand} 
               onUpdateAssets={(assets) => setState(p => ({ ...p, assets }))}
               onSendMessage={handleRetakeConversation}
               onRenameFolder={handleRenameFolder}
               onDeleteFolder={handleDeleteFolder}
               onAssetAction={handleAssetStatus}
-              onExtendVideo={() => {}}
+              onExtendVideo={handleExtendVideo}
             />
           ) : (
             <div className="h-full bg-black overflow-hidden">
