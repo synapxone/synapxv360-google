@@ -16,53 +16,62 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
   const [website, setWebsite] = useState(brand?.website || '');
   const [instagram, setInstagram] = useState(brand?.instagram || '');
   const [visualRefs, setVisualRefs] = useState<string[]>(brand?.visualReferences || []);
-  const [kit, setKit] = useState<BrandKit | undefined>(brand?.kit);
+  
+  // Inicializa com um kit padrão se não houver um para permitir upload manual
+  const [kit, setKit] = useState<BrandKit>(brand?.kit || {
+    name: brand?.name || '',
+    concept: '',
+    tone: [],
+    colors: { primary: '#333333', secondary: '#666666', accent: '#indigo-500', neutralLight: '#f5f5f5', neutralDark: '#111111' },
+    typography: { display: 'Inter', body: 'Inter', mono: 'JetBrains Mono' }
+  });
+  
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const t = {
     pt: {
-      title: brand && brand.id.includes('-') ? "Editar Marca" : "Nova Marca",
+      title: brand && brand.id.includes('-') ? "Editar Identidade" : "Nova Marca",
       name: "Nome da Marca",
       web: "Website",
       insta: "Instagram",
-      refs: "Referências Visuais",
+      refs: "Moodboard / Referências",
       identity: "Ativos de Identidade",
       logo: "Logo Principal",
       symbol: "Símbolo",
       icon: "Ícone",
       variations: "Variações",
-      aiBtn: isGenerating ? "ANALISANDO..." : "SCAN & BUILD",
+      aiBtn: isGenerating ? "ANALISANDO..." : (brand?.kit ? "RE-SCAN ESTRATÉGICO" : "SCAN & BUILD"),
       save: isSaving ? "SINCRONIZANDO..." : "SALVAR BRANDBOOK",
-      delete: "EXCLUIR",
+      delete: "EXCLUIR MARCA",
       concept: "Posicionamento",
-      colors: "Cores Identificadas",
+      colors: "Paleta Identificada",
       typo: "Tipografia",
       tone: "Tom de Voz",
-      approval: "Aprove a identidade extraída.",
-      error: "Erro na varredura. Tente novamente."
+      approval: "Ajuste os detalhes ou re-escaneie para atualizar o DNA.",
+      error: "Erro na varredura. Verifique os links e tente novamente."
     },
     en: {
-      title: brand && brand.id.includes('-') ? "Edit Brand" : "New Brand",
+      title: brand && brand.id.includes('-') ? "Edit Identity" : "New Brand",
       name: "Brand Name",
       web: "Website",
       insta: "Instagram",
-      refs: "Visual References",
+      refs: "Moodboard / References",
       identity: "Identity Assets",
       logo: "Main Logo",
       symbol: "Symbol",
       icon: "Icon",
       variations: "Variations",
-      aiBtn: isGenerating ? "SCANNING..." : "SCAN & BUILD",
+      aiBtn: isGenerating ? "SCANNING..." : (brand?.kit ? "STRATEGIC RE-SCAN" : "SCAN & BUILD"),
       save: isSaving ? "SYNCING..." : "SAVE BRANDBOOK",
-      delete: "DELETE",
+      delete: "DELETE BRAND",
       concept: "Positioning",
       colors: "Identified Palette",
       typo: "Typography",
       tone: "Tone of Voice",
-      approval: "Approve extracted identity.",
-      error: "Scan error. Please try again."
+      approval: "Adjust details or re-scan to update DNA.",
+      error: "Scan error. Please check links and try again."
     }
   }[language === 'es' ? 'en' : language];
 
@@ -72,7 +81,14 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
     setError(null);
     try {
       const proposal = await gemini.generateBrandProposal(name, website, instagram, visualRefs);
-      setKit(proposal);
+      // Mescla com logos já existentes para não perder no re-scan
+      setKit(prev => ({
+        ...proposal,
+        logoUrl: prev.logoUrl || proposal.logoUrl,
+        symbolUrl: prev.symbolUrl || proposal.symbolUrl,
+        iconUrl: prev.iconUrl || proposal.iconUrl,
+        logoVariations: prev.logoVariations || proposal.logoVariations
+      }));
     } catch (err) {
       setError(t.error);
     } finally {
@@ -82,12 +98,12 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
 
   const handleAssetUpload = (type: 'logo' | 'symbol' | 'icon' | 'variation', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && kit) {
+    // Fix: Explicitly check if file is an instance of Blob to avoid TypeScript 'unknown' error on line 125
+    if (file instanceof Blob) {
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
         setKit(prev => {
-          if (!prev) return prev;
           if (type === 'logo') return { ...prev, logoUrl: result };
           if (type === 'symbol') return { ...prev, symbolUrl: result };
           if (type === 'icon') return { ...prev, iconUrl: result };
@@ -100,13 +116,18 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setVisualRefs(prev => [...prev, reader.result as string]);
-      };
-      reader.readAsDataURL(file);
+    const files = e.target.files;
+    if (files) {
+      Array.from(files).forEach(file => {
+        // Fix: Explicitly check if file is an instance of Blob to avoid potential type issues
+        if (file instanceof Blob) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setVisualRefs(prev => [...prev, reader.result as string]);
+          };
+          reader.readAsDataURL(file);
+        }
+      });
     }
   };
 
@@ -130,7 +151,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
     }
   };
 
-  const AssetSlot = ({ label, value, type, onRemove }: { label: string, value?: string, type: 'logo' | 'symbol' | 'icon', onRemove?: () => void }) => (
+  const AssetSlot = ({ label, value, type }: { label: string, value?: string, type: 'logo' | 'symbol' | 'icon' }) => (
     <div className="space-y-2">
       <label className="text-[9px] font-black text-neutral-600 uppercase tracking-widest block">{label}</label>
       <div className="relative group aspect-square bg-black border border-neutral-800 rounded-xl overflow-hidden flex items-center justify-center">
@@ -142,6 +163,9 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                 <input type="file" className="hidden" onChange={(e) => handleAssetUpload(type, e)} accept="image/*" />
               </label>
+              <button onClick={() => setKit(prev => ({ ...prev, [`${type}Url`]: undefined }))} className="p-2 bg-red-500 text-white rounded-lg hover:scale-110 transition-transform">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              </button>
             </div>
           </>
         ) : (
@@ -213,39 +237,37 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
                 </div>
               </div>
 
-              {/* IDENTITY ASSETS - ONLY SHOW IF KIT EXISTS */}
-              {kit && (
-                <div className="space-y-6 pt-6 border-t border-white/5 animate-in slide-in-from-top-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{t.identity}</h3>
-                  </div>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
-                    <AssetSlot label={t.logo} value={kit.logoUrl} type="logo" />
-                    <AssetSlot label={t.symbol} value={kit.symbolUrl} type="symbol" />
-                    <AssetSlot label={t.icon} value={kit.iconUrl} type="icon" />
-                    <div className="space-y-2">
-                      <label className="text-[9px] font-black text-neutral-600 uppercase tracking-widest block">{t.variations}</label>
-                      <label className="aspect-square bg-neutral-900/50 border-2 border-dashed border-neutral-800 rounded-xl flex items-center justify-center cursor-pointer hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all text-neutral-600">
-                        <span className="text-xl">+</span>
-                        <input type="file" className="hidden" multiple onChange={(e) => handleAssetUpload('variation', e)} accept="image/*" />
-                      </label>
-                    </div>
-                  </div>
-                  {kit.logoVariations && kit.logoVariations.length > 0 && (
-                    <div className="grid grid-cols-5 gap-2 pt-2">
-                      {kit.logoVariations.map((v, i) => (
-                        <div key={i} className="relative aspect-square bg-black border border-neutral-800 rounded-lg overflow-hidden p-1 group">
-                          <img src={v} className="w-full h-full object-contain" />
-                          <button 
-                            onClick={() => setKit(prev => prev ? { ...prev, logoVariations: prev.logoVariations?.filter((_, idx) => idx !== i) } : prev)}
-                            className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[8px] rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          >×</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              {/* IDENTITY ASSETS */}
+              <div className="space-y-6 pt-6 border-t border-white/5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{t.identity}</h3>
                 </div>
-              )}
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
+                  <AssetSlot label={t.logo} value={kit.logoUrl} type="logo" />
+                  <AssetSlot label={t.symbol} value={kit.symbolUrl} type="symbol" />
+                  <AssetSlot label={t.icon} value={kit.iconUrl} type="icon" />
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-neutral-600 uppercase tracking-widest block">{t.variations}</label>
+                    <label className="aspect-square bg-neutral-900/50 border-2 border-dashed border-neutral-800 rounded-xl flex items-center justify-center cursor-pointer hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all text-neutral-600">
+                      <span className="text-xl">+</span>
+                      <input type="file" className="hidden" multiple onChange={(e) => handleAssetUpload('variation', e)} accept="image/*" />
+                    </label>
+                  </div>
+                </div>
+                {kit.logoVariations && kit.logoVariations.length > 0 && (
+                  <div className="grid grid-cols-5 gap-2 pt-2">
+                    {kit.logoVariations.map((v, i) => (
+                      <div key={i} className="relative aspect-square bg-black border border-neutral-800 rounded-lg overflow-hidden p-1 group">
+                        <img src={v} className="w-full h-full object-contain" />
+                        <button 
+                          onClick={() => setKit(prev => ({ ...prev, logoVariations: prev.logoVariations?.filter((_, idx) => idx !== i) }))}
+                          className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[8px] rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="space-y-4 pt-6 border-t border-white/5">
                 <label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">{t.refs}</label>
@@ -258,7 +280,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
                   ))}
                   <label className="aspect-square rounded-2xl border-2 border-dashed border-neutral-800 hover:border-indigo-500/50 flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-indigo-500/5 group text-neutral-600">
                     <span className="text-2xl group-hover:scale-125 transition-transform">+</span>
-                    <input type="file" onChange={handleFileUpload} accept="image/*" className="hidden" />
+                    <input type="file" multiple onChange={handleFileUpload} accept="image/*" className="hidden" />
                   </label>
                 </div>
               </div>
@@ -266,30 +288,28 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
               <button 
                 onClick={handleGenerateIdentity}
                 disabled={!name || isGenerating}
-                className={`w-full py-6 rounded-[28px] font-black text-xs uppercase tracking-[0.3em] transition-all shadow-xl flex items-center justify-center gap-3 active:scale-95 disabled:opacity-20 ${
-                  kit ? 'bg-neutral-800 text-neutral-500' : 'bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-600/20'
-                }`}
+                className={`w-full py-6 rounded-[28px] font-black text-xs uppercase tracking-[0.3em] transition-all shadow-xl flex items-center justify-center gap-3 active:scale-95 disabled:opacity-20 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-600/20`}
               >
                 {isGenerating && <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
-                {kit ? (language === 'pt' ? 'REESCANEAR' : 'RE-SCAN') : t.aiBtn}
+                {t.aiBtn}
               </button>
             </div>
 
             {/* Right: Creative Intelligence Preview */}
             <div className="bg-black/50 border border-white/5 rounded-[40px] p-8 sm:p-10 flex flex-col relative overflow-hidden group min-h-[400px]">
-               {!kit ? (
+               {isGenerating ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6">
                   <div className="w-20 h-20 bg-neutral-900 rounded-3xl flex items-center justify-center text-4xl animate-pulse">📡</div>
                   <div className="space-y-2">
                     <p className="text-[10px] font-black text-white uppercase tracking-widest">Digital Twin Scanning</p>
-                    <p className="text-[10px] text-neutral-600 font-bold uppercase tracking-widest leading-relaxed max-w-[240px]">A synapx extrairá sua essência visual a partir dos links fornecidos.</p>
+                    <p className="text-[10px] text-neutral-600 font-bold uppercase tracking-widest leading-relaxed max-w-[240px]">Escaneando site e redes sociais para atualizar seu BrandBook...</p>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-10 animate-in fade-in slide-in-from-right-4 duration-500">
                   <div className="space-y-2">
                     <h3 className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em]">{t.concept}</h3>
-                    <p className="text-sm text-white font-medium italic leading-relaxed">"{kit.concept}"</p>
+                    <p className="text-sm text-white font-medium italic leading-relaxed">"{kit.concept || 'Defina sua essência através do scan estratégico.'}"</p>
                   </div>
 
                   <div className="space-y-4">
@@ -309,23 +329,23 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
                       <h3 className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em]">{t.typo}</h3>
                       <div className="space-y-1">
                         <p className="text-lg text-white font-black truncate">{kit.typography.display}</p>
-                        <p className="text-[8px] text-neutral-600 uppercase tracking-widest">Visual DNA</p>
+                        <p className="text-[8px] text-neutral-600 uppercase tracking-widest">Primary DNA</p>
                       </div>
                     </div>
                     <div className="space-y-3">
                       <h3 className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em]">{t.tone}</h3>
                       <div className="flex flex-wrap gap-2">
-                        {kit.tone.slice(0, 4).map((t, i) => (
+                        {kit.tone.length > 0 ? kit.tone.slice(0, 4).map((t, i) => (
                           <span key={i} className="px-2 py-1 bg-white/5 border border-white/5 rounded text-[8px] font-bold text-neutral-400 uppercase tracking-widest">{t}</span>
-                        ))}
+                        )) : <span className="text-[9px] text-neutral-600 italic">Pendente scan...</span>}
                       </div>
                     </div>
                   </div>
                   
-                  {kit.hasExistingLogo && (
+                  {kit.logoUrl && (
                     <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center gap-4">
-                      <span className="text-xl">✅</span>
-                      <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest leading-relaxed">Identidade Visual Detectada com Sucesso. Ativos carregados no workspace.</p>
+                      <span className="text-xl">✨</span>
+                      <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest leading-relaxed">Identidade Visual Ativa. Seus ativos estão prontos para produção.</p>
                     </div>
                   )}
                 </div>
@@ -337,7 +357,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
         {/* Footer Actions */}
         <div className="px-6 py-5 sm:p-10 bg-neutral-950/80 border-t border-white/10 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="hidden sm:block text-[9px] text-neutral-500 font-bold uppercase tracking-widest max-w-[300px] leading-relaxed italic">
-            {kit ? t.approval : "Configure o nome e links para iniciar a varredura da marca."}
+            {t.approval}
           </p>
           <div className="flex w-full sm:w-auto gap-4">
             {brand && onDelete && (
@@ -347,7 +367,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
             )}
             <button 
               onClick={handleSave} 
-              disabled={isSaving || !name || !kit}
+              disabled={isSaving || !name}
               className="flex-[2] sm:flex-none px-12 py-5 bg-white hover:bg-indigo-600 text-black hover:text-white font-black rounded-2xl shadow-2xl transition-all active:scale-95 disabled:opacity-10 uppercase text-[10px] tracking-widest"
             >
               {t.save}

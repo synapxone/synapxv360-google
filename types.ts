@@ -32,6 +32,7 @@ export interface CreativeBrief {
   formatos: string[];
   headline: string;
   descricao_cena: string;
+  specialist_type: 'social' | 'copy' | 'mockup' | 'branding' | 'video' | 'music' | 'web';
 }
 
 export interface BrandKit {
@@ -83,6 +84,8 @@ export interface DesignAsset {
   type: string;
   dimensions: string;
   imageUrl?: string;
+  videoUrl?: string;
+  audioUrl?: string;
   referenceImageUrl?: string;
   prompt: string;
   description: string;

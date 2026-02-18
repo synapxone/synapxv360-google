@@ -1,150 +1,243 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
-import { CampaignState, Language, GroundingSource, BrandKit } from "../types";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
+import { CampaignState, Language, GroundingSource, BrandKit, DesignAsset, Message } from "../types";
 
-// AGENTE 1: Diretor de Marketing (Estratégia e Briefing)
-const MARKETING_DIRECTOR_INSTRUCTION = `
-Você é o CMO e Diretor de Estratégia da "synapx Agency".
-Sua missão é transformar desejos do cliente em estratégias de marketing de elite.
+// 0. ORQUESTRADOR: Synapx Core (Consultor & Estrategista)
+const ORCHESTRATOR_INSTRUCTION = `
+Você é o "Synapx Core", o Diretor de Estratégia e Operações da synapx Agency.
+Sua inteligência é alimentada estritamente pelo BRANDBOOK da marca ativa fornecido no contexto.
 
-DIRETRIZES:
-1. PESQUISA: Use sempre o Google Search para tendências atuais e dados de mercado.
-2. ESTRATÉGIA: Pense no ROI e no impacto da marca ativa.
-3. OUTPUT: Se o usuário pedir qualquer criação visual ou campanha, gere OBRIGATORIAMENTE um bloco \`\`\`json-brief \`\`\`.
+REGRAS DE OURO:
+1. IDENTIDADE VISUAL É PRIORIDADE: Use as cores HEX, a Tipografia e o Tom de Voz do kit em todas as entregas.
+2. COMPORTAMENTO CONSULTIVO: Se o usuário pedir algo genérico, faça 2 perguntas para alinhar com o objetivo de negócio (KPIs).
+3. DELEGAÇÃO: Quando delegar para especialistas, repasse explicitamente as variáveis: [BRAND_KIT: {colors, tone, concept, typography}].
+4. PESQUISA: Sempre que houver dúvida sobre mercado ou concorrentes, use o googleSearch.
 
-ESQUEMA JSON-BRIEF:
+JSON-BRIEF MANDATÓRIO PARA EXECUÇÃO:
+\`\`\`json-brief
 {
-  "objetivo": "Meta principal da campanha",
-  "publico_target": "Persona detalhada",
-  "tom_de_voz": "Atributos de linguagem",
-  "cores_hex": ["#HEX1", "#HEX2"],
-  "conceito_criativo": "A grande idéia central",
-  "referencias_esteticas": "Apple, Nike, Saint Laurent style",
-  "formatos": ["1080x1080", "9:16"],
-  "headline": "Chamada impactante",
-  "descricao_cena": "O que deve acontecer visualmente na peça principal"
+  "specialist_type": "estrategico | social | copy | mockup | branding | video | music | web",
+  "objetivo": "Meta clara do asset",
+  "brand_variables": { "primary": "#HEX", "tone": "...", "concept": "...", "fonts": "..." },
+  "instrucoes_tecnicas": "Prompt detalhado ou roteiro focado no DNA visual",
+  "pergunta_de_refinamento": "Uma pergunta para o usuário melhorar a próxima iteração",
+  "mood": "luxo | tech | organico | etc"
 }
-
-Fale como um executivo de agência antes de entregar o JSON estratégico.
+\`\`\`
 `;
 
-// AGENTE 2: Diretor de Arte (Design System & Prompt Engineering)
-const ART_DIRECTOR_INSTRUCTION = `
-Você é o Diretor de Arte Sênior da "synapx Agency". Especialista em Imagen 4.
-Sua única responsabilidade é transformar um Brief Estratégico em prompts de imagem profissionais.
-
-ESTÉTICA OBRIGATÓRIA:
-- Referências: Apple (minimalismo), Nike (impacto), Saint Laurent (luxo noir).
-- Estilo: Cinematic lighting, 8k, ultra-minimalist, depth of field, high-end commercial photography.
-- PROIBIDO: Fotos de banco (stock), pessoas genéricas sorrindo, layouts poluídos ou amadores.
-
-OUTPUT OBRIGATÓRIO:
-Retorne um bloco \`\`\`json-assets \`\`\` com EXATAMENTE 5 variações:
-1. Lifestyle: O produto em uso elegante.
-2. Conceitual: Metáfora visual abstrata.
-3. Tipográfico: Foco na hierarquia visual da headline.
-4. Produto: Close-up macro com iluminação dramática.
-5. Abstrato: Texturas e cores que evocam a alma da marca.
-
-ESQUEMA JSON-ASSETS (Array de 5 objetos):
-{
-  "name": "Título da Variação",
-  "type": "Lifestyle | Conceitual | Tipográfico | Produto | Abstrato",
-  "dimensions": "1080x1080",
-  "prompt": "DETAILED TECHNICAL PROMPT IN ENGLISH. Specific lighting, lens (e.g. 35mm f/1.4), materials, and composition. No text tags.",
-  "copy": "Legenda estratégica curta",
-  "description": "Explicação do design"
-}
-
-Responda APENAS com o bloco JSON.
-`;
+const SPECIALISTS: Record<string, string> = {
+  estrategico: `Você é o Estrategista de Inteligência de Mercado. Use o Google Search para referências reais.`,
+  social: `Você é o Diretor de Arte (Social Media). Crie prompts de imagem detalhados usando as cores {brandColors} e estilo {brandTone}.`,
+  copy: `Você é o Redator Publicitário Sênior. Escreva adaptando ao Tom de Voz {brandTone} e conceito {brandConcept}.`,
+  mockup: `Você é o Especialista em Ambientação. Situe a marca {brandName} em cenários premium com iluminação {brandColors}.`,
+  branding: `Você é o Arquiteto de Identidade Visual. Evolua logos e patterns baseados no conceito {brandConcept}.`,
+  video: `Você é o Diretor de Cinema (Veo Engine). Roteirize vídeos cinematográficos usando a paleta {brandColors}.`,
+  music: `Você é o Sound Designer. Crie trilhas e letras que reflitam a energia de {brandTone}.`,
+  web: `Você é o Lead de UI/UX. Projete interfaces usando {brandColors} para CTAs e hierarquia visual.`
+};
 
 export class GeminiService {
+  // Always initialize client with named parameter apiKey from environment.
   private getClient() {
     return new GoogleGenAI({ apiKey: process.env.API_KEY });
   }
 
-  // Pipeline Agente 1: Diretor de Marketing
-  async chat(message: string, imageBase64: string | null, history: { role: string; parts: any[] }[] = [], currentState: CampaignState, language: Language) {
+  async chat(message: string, imageBase64: string | null, history: Message[], currentState: CampaignState, language: Language) {
     const ai = this.getClient();
     const activeBrand = currentState.brands.find(b => b.id === currentState.activeBrandId);
     
+    // context injection with BrandKit data
     const brandContext = activeBrand 
-      ? `MARCA ATIVA: ${activeBrand.name}. CONCEITO: ${activeBrand.kit?.concept}. CORES: ${JSON.stringify(activeBrand.kit?.colors)}.`
-      : 'Novos negócios.';
+      ? `[DNA DA MARCA ATIVA]
+         Nome: ${activeBrand.name}
+         Conceito: ${activeBrand.kit?.concept}
+         Cores HEX: ${JSON.stringify(activeBrand.kit?.colors)}
+         Tipografia: ${JSON.stringify(activeBrand.kit?.typography)}
+         Tom de Voz: ${activeBrand.kit?.tone?.join(', ')}`
+      : 'Nenhuma marca selecionada. Oriente o usuário a configurar ou selecionar uma marca para personalização.';
 
-    const contents = [
-      ...history.map(h => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: h.parts })),
-      { role: 'user', parts: [{ text: `CONTEXTO MARCA:\n${brandContext}\n\nSOLICITAÇÃO: ${message}` }] }
-    ];
+    const contents = history.map(m => {
+      const parts: any[] = [{ text: m.content }];
+      if (m.referenceImage) {
+        const [mimeType, b64Data] = m.referenceImage.split(';base64,');
+        parts.push({ inlineData: { mimeType: mimeType.replace('data:', ''), data: b64Data } });
+      }
+      return { role: m.role === 'assistant' ? 'model' : 'user', parts };
+    });
 
+    const currentParts: any[] = [{ text: `CONTEXTO BRANDBOOK:\n${brandContext}\n\nSOLICITAÇÃO:\n${message}` }];
+    if (imageBase64) {
+      const [mimeType, b64Data] = imageBase64.split(';base64,');
+      currentParts.push({ inlineData: { mimeType: mimeType.replace('data:', ''), data: b64Data } });
+    }
+    contents.push({ role: 'user', parts: currentParts });
+
+    // Using gemini-3-pro-preview for advanced reasoning and grounding tasks.
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents,
       config: {
-        systemInstruction: MARKETING_DIRECTOR_INSTRUCTION,
+        systemInstruction: ORCHESTRATOR_INSTRUCTION,
         tools: [{ googleSearch: {} }],
-        temperature: 0.8,
+        temperature: 0.7,
       },
     });
 
+    // Extract grounding chunks for Google Search.
     const sources: GroundingSource[] = (response.candidates?.[0]?.groundingMetadata?.groundingChunks || [])
       .filter(chunk => chunk.web)
-      .map(chunk => ({ title: chunk.web.title, uri: chunk.web.uri }));
+      .map(chunk => ({ title: chunk.web?.title, uri: chunk.web?.uri }));
 
+    // Access .text property directly.
     return { text: response.text || '', sources };
   }
 
-  // Pipeline Agente 2: Diretor de Arte
-  async artDirector(briefContent: string) {
+  async runSpecialist(brief: any, brandContext: any) {
     const ai = this.getClient();
+    const type = brief.specialist_type || 'social';
+    const baseInstruction = SPECIALISTS[type] || SPECIALISTS.social;
+
+    const finalInstruction = baseInstruction
+      .replace(/{brandContext}/g, JSON.stringify(brandContext))
+      .replace(/{brandName}/g, brandContext.name || 'a marca')
+      .replace(/{brandColors}/g, JSON.stringify(brandContext.colors || {}))
+      .replace(/{brandTone}/g, brandContext.tone || 'profissional')
+      .replace(/{brandConcept}/g, brandContext.concept || 'inovação');
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
-      contents: [{ role: 'user', parts: [{ text: `TRANSFORME ESTE BRIEF EM PROMPTS DE DESIGN MASTER:\n\n${briefContent}` }] }],
+      contents: [{ role: 'user', parts: [{ text: `EXECUTAR BRIEFING:\n${JSON.stringify(brief)}\n\nCONTEXTO VISUAL:\n${JSON.stringify(brandContext)}` }] }],
       config: {
-        systemInstruction: ART_DIRECTOR_INSTRUCTION,
-        temperature: 0.3,
+        systemInstruction: `${finalInstruction}\nRetorne EXCLUSIVAMENTE um bloco \`\`\`json-assets \`\`\` contendo um array de objetos [name, type, prompt, copy, description, dimensions].`,
+        tools: type === 'estrategico' ? [{ googleSearch: {} }] : [],
+        temperature: 0.4,
       },
     });
+
     return response.text || '';
   }
 
-  async generateBrandProposal(brandName: string, website?: string, instagram?: string, references?: string[]): Promise<BrandKit> {
-    const ai = this.getClient();
-    const imageParts = (references || []).map(base64 => ({
-      inlineData: { data: base64.split(',')[1], mimeType: "image/png" }
-    }));
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: { parts: [...imageParts, { text: `Analise a marca "${brandName}". Retorne JSON com name, concept, tone (array), colors (HEX), typography (display/body), logoDescription.` }] },
-      config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" }
-    });
-    return JSON.parse(response.text || '{}');
-  }
-
   async generateImage(prompt: string, brandContext?: string, useHighEnd: boolean = true) {
-    const ai = this.getClient();
-    const masterPrompt = `Commercial High-End Advertising Photography. ${brandContext ? `Brand: ${brandContext}.` : ''} Scene: ${prompt}. Cinematic lighting, 8k, ultra-minimalist, photorealistic.`;
+    // Create instance right before API call as per guidelines for Imagen/Veo.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const masterPrompt = `Commercial High-End Photography. Visual Identity: ${brandContext}. Scene: ${prompt}. Professional studio lighting, matching brand palette, 8k resolution.`;
 
     if (useHighEnd) {
       try {
         const response = await ai.models.generateImages({
           model: 'imagen-4.0-generate-001',
           prompt: masterPrompt,
-          config: { numberOfImages: 1, aspectRatio: '1:1', outputMimeType: 'image/png' },
+          config: { numberOfImages: 1, aspectRatio: '1:1', outputMimeType: 'image/jpeg' },
         });
-        return `data:image/png;base64,${response.generatedImages[0].image.imageBytes}`;
-      } catch (e) {
-        console.warn("Imagen 4 error, falling back...");
-      }
+        if (response.generatedImages?.[0]?.image?.imageBytes) {
+          return `data:image/jpeg;base64,${response.generatedImages[0].image.imageBytes}`;
+        }
+      } catch (e) { console.warn("Imagen fallback"); }
     }
 
+    // Fallback to gemini-2.5-flash-image.
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: { parts: [{ text: masterPrompt }] }
     });
-    const part = response.candidates?.[0]?.content.parts.find(p => p.inlineData);
-    return part?.inlineData ? `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` : `https://picsum.photos/1024/1024`;
+    
+    // Iterate through all parts to find the image part for nano banana series models.
+    if (response.candidates?.[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      }
+    }
+    return `https://picsum.photos/1024/1024`;
+  }
+
+  async generateVideo(prompt: string) {
+    // Mandatory API key selection check for Veo models.
+    // @ts-ignore
+    if (window.aistudio && !(await window.aistudio.hasSelectedApiKey())) {
+      // @ts-ignore
+      await window.aistudio.openSelectKey();
+    }
+    // New instance created right before call to ensure up-to-date API key.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    try {
+      let operation = await ai.models.generateVideos({
+        model: 'veo-3.1-fast-generate-preview',
+        prompt: `Commercial cinematic quality: ${prompt}`,
+        config: { numberOfVideos: 1, resolution: '720p', aspectRatio: '16:9' }
+      });
+      while (!operation.done) {
+        await new Promise(r => setTimeout(r, 10000));
+        operation = await ai.operations.getVideosOperation({ operation: operation });
+      }
+      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+      // Fetch video from URI and append API key.
+      const res = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+      const videoBlob = await res.blob();
+      // Explicitly cast to unknown then Blob to avoid potential type conflicts with genai Blob.
+      return URL.createObjectURL(videoBlob as unknown as Blob);
+    } catch (e) { return null; }
+  }
+
+  async generateAudio(text: string) {
+    const ai = this.getClient();
+    try {
+      // Using gemini-2.5-flash-preview-tts for speech generation.
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
+        },
+      });
+      // Audio bytes are raw PCM data.
+      const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      return data ? `data:audio/pcm;base64,${data}` : null;
+    } catch (e) { return null; }
+  }
+
+  async generateBrandProposal(name: string, website?: string, instagram?: string, visualReferences?: string[]): Promise<BrandKit> {
+    const ai = this.getClient();
+    // Using gemini-3-pro-preview for complex research tasks with Google Search grounding.
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: `Deep research for brand "${name}" (Web: ${website || 'N/A'}). Extract visual DNA. Return JSON with concept, tone, colors, and typography.`,
+      config: { 
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            concept: { type: Type.STRING },
+            tone: { type: Type.ARRAY, items: { type: Type.STRING } },
+            colors: {
+              type: Type.OBJECT,
+              properties: {
+                primary: { type: Type.STRING },
+                secondary: { type: Type.STRING },
+                accent: { type: Type.STRING },
+                neutralLight: { type: Type.STRING },
+                neutralDark: { type: Type.STRING }
+              }
+            },
+            typography: {
+              type: Type.OBJECT,
+              properties: {
+                display: { type: Type.STRING },
+                body: { type: Type.STRING },
+                mono: { type: Type.STRING }
+              }
+            },
+            logoDescription: { type: Type.STRING },
+            hasExistingLogo: { type: Type.BOOLEAN }
+          }
+        }
+      }
+    });
+    // Access response.text directly (not as a method).
+    return JSON.parse(response.text || '{}');
   }
 }
 
