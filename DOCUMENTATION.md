@@ -123,12 +123,18 @@ synapx Agency é uma plataforma de marketing full-service alimentada por IA (Gem
 - ✅ **Migração de Assets**: Implementado trigger no frontend que atualiza automaticamente o `brand_id` dos assets locais e remotos quando uma marca legada é migrada para a nova arquitetura de DB.
 - ✅ **Workspace Safe Guard**: Adicionada verificação de nulidade em `currentFolder` no componente Workspace para prevenir crashes em casos de filtros agressivos.
 
-**Arquivos modificados:**
-- `App.tsx` — lógica de merge de assets e handleUpdateBrand.
-- `components/Workspace.tsx` — correções de segurança.
+---
+### 2024-05-23 — Fix: Modal de Nova Marca em Tela Cheia (v385)
 
-**Estado atual:**
-- ✅ Ativos antigos e novos coexistem pacificamente.
-- ✅ Migração de marcas agora carrega os ativos junto, sem perdas.
-- ✅ Navegação no Workspace à prova de falhas.
+**O que foi feito:**
+- ✅ **Renderização Root**: Movido `BrandManager` de nova marca (e de edição) do Sidebar para o `App.tsx`.
+- ✅ **Z-Index Correction**: Modal agora cobre a tela toda corretamente com overlay, pois não está mais restrito ao contexto de empilhamento da Sidebar.
+- ✅ **Prop Drilling**: Sidebar agora apenas emite eventos `onNewBrand` e `onEditBrand`, delegando a renderização visual para o componente pai.
+
+**Arquivos modificados:**
+- `components/Sidebar.tsx` — removido BrandManager interno, adicionadas props de callback.
+- `App.tsx` — adicionado estado global de modal e renderização condicional do BrandManager.
+
+**Decisão técnica:**
+- Modais críticos de sistema devem ser sempre renderizados no nível mais alto possível da árvore de componentes para evitar conflitos de CSS (transform/fixed) e z-index.
 ---

@@ -24,6 +24,9 @@ const App: React.FC = () => {
   const [assetQuantity, setAssetQuantity] = useState(1);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  
+  const [isNewBrandModalOpen, setIsNewBrandModalOpen] = useState(false);
+  const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
 
   const requestCounter = useRef(0);
   const stateRef = useRef(state);
@@ -378,6 +381,8 @@ const App: React.FC = () => {
         onSendMessage={handleSendMessage} 
         onUpdateBrand={handleUpdateBrand} 
         onDeleteBrand={handleDeleteBrand}
+        onNewBrand={() => setIsNewBrandModalOpen(true)}
+        onEditBrand={(brand) => setEditingBrand(brand)}
         onSwitchBrand={(id) => {
           setState(p => ({ ...p, activeBrandId: id }));
           setActiveGroupId(null);
@@ -458,6 +463,28 @@ const App: React.FC = () => {
       
       {isMobileMenuOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileMenuOpen(false)} />
+      )}
+
+      {/* Modal de Nova Marca ou Edição — renderizado no nível raiz para cobrir tela toda */}
+      {(isNewBrandModalOpen || editingBrand) && (
+        <BrandManager
+          brand={editingBrand || undefined}
+          language={language}
+          onSave={async (b) => {
+            await handleUpdateBrand(b);
+            setIsNewBrandModalOpen(false);
+            setEditingBrand(null);
+          }}
+          onClose={() => {
+            setIsNewBrandModalOpen(false);
+            setEditingBrand(null);
+          }}
+          onDelete={async (id) => {
+            await handleDeleteBrand(id);
+            setIsNewBrandModalOpen(false);
+            setEditingBrand(null);
+          }}
+        />
       )}
     </div>
   );

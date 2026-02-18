@@ -1,7 +1,6 @@
 
 import React, { useState } from 'react';
 import { CampaignState, Language, Brand } from '../types';
-import BrandManager from './BrandManager';
 
 interface SidebarProps {
   state: CampaignState;
@@ -10,15 +9,15 @@ interface SidebarProps {
   onUpdateBrand: (brand: Brand) => Promise<void>;
   onDeleteBrand: (id: string) => void;
   onSwitchBrand: (id: string) => void;
+  onNewBrand: () => void;
+  onEditBrand: (brand: Brand) => void;
   language: Language;
   setLanguage: (lang: Language) => void;
   isMobileOpen: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpdateBrand, onDeleteBrand, onSwitchBrand, language, setLanguage, isMobileOpen }) => {
+const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpdateBrand, onDeleteBrand, onSwitchBrand, onNewBrand, onEditBrand, language, setLanguage, isMobileOpen }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [brandToEdit, setBrandToEdit] = useState<Brand | null>(null);
-  const [isNewBrandModalOpen, setIsNewBrandModalOpen] = useState(false);
   
   const activeBrand = state.brands.find(b => b.id === state.activeBrandId);
   
@@ -86,7 +85,7 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
         ))}
         
         <button 
-          onClick={() => setBrandToEdit(activeBrand)}
+          onClick={() => onEditBrand(activeBrand)}
           className={`mt-4 w-full flex items-center gap-4 p-4 bg-indigo-600/10 border border-indigo-500/20 rounded-[24px] transition-all group ${isCollapsed && !isMobileOpen ? 'lg:justify-center' : ''}`}
         >
           <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-xl shrink-0 group-hover:rotate-12 transition-transform shadow-2xl">🎨</div>
@@ -126,7 +125,7 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
               {(!isCollapsed || isMobileOpen) && (
                 <div className="flex justify-between items-center mb-5 px-1">
                   <h3 className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.2em]">{t.brand}</h3>
-                  <button onClick={() => setIsNewBrandModalOpen(true)} className="px-3 py-1.5 bg-indigo-600/10 text-indigo-500 border border-indigo-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all">
+                  <button onClick={() => onNewBrand()} className="px-3 py-1.5 bg-indigo-600/10 text-indigo-500 border border-indigo-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all">
                     {t.newBrand}
                   </button>
                 </div>
@@ -149,7 +148,7 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
                             <p className="text-[8px] text-neutral-600 font-mono truncate uppercase tracking-widest">{brand.kit?.concept || 'Market Authority'}</p>
                           </div>
                           <div 
-                            onClick={(e) => { e.stopPropagation(); setBrandToEdit(brand); }}
+                            onClick={(e) => { e.stopPropagation(); onEditBrand(brand); }}
                             className="p-2 opacity-0 group-hover:opacity-100 hover:bg-white/10 rounded-lg transition-all text-neutral-400 hover:text-white"
                           >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
@@ -162,7 +161,7 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
                 
                 {state.brands.length === 0 && !isCollapsed && (
                   <button 
-                    onClick={() => setIsNewBrandModalOpen(true)}
+                    onClick={() => onNewBrand()}
                     className="w-full flex items-center justify-center gap-3 p-6 border-2 border-dashed border-neutral-800 rounded-3xl text-neutral-600 hover:border-indigo-500/50 hover:text-indigo-400 transition-all"
                   >
                     <span className="text-2xl">+</span>
@@ -196,20 +195,6 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
             </div>
           )}
         </div>
-        
-        {(isNewBrandModalOpen || brandToEdit) && (
-          <BrandManager 
-            brand={brandToEdit || undefined}
-            language={language} 
-            onClose={() => { setIsNewBrandModalOpen(false); setBrandToEdit(null); }} 
-            onSave={async (b) => { 
-              await onUpdateBrand(b);
-              setIsNewBrandModalOpen(false);
-              setBrandToEdit(null);
-            }} 
-            onDelete={onDeleteBrand}
-          />
-        )}
       </div>
 
       <style>{`
