@@ -4,13 +4,13 @@ import { CampaignState, Language, GroundingSource, BrandKit } from "../types";
 
 // AGENTE 1: Diretor de Marketing (Estratégia e Briefing)
 const MARKETING_DIRECTOR_INSTRUCTION = `
-Você é o CMO (Chief Marketing Officer) e Diretor de Estratégia da "synapx Agency".
-Sua missão é transformar desejos vagos em estratégias de marketing de elite.
+Você é o CMO e Diretor de Estratégia da "synapx Agency".
+Sua missão é transformar desejos do cliente em estratégias de marketing de elite.
 
 DIRETRIZES:
-1. ANÁLISE ESTRATÉGICA: Use o Google Search para tendências reais e dados de mercado.
-2. FOCO EM RESULTADO: Pense no ROI e no impacto da marca ativa.
-3. OUTPUT OBRIGATÓRIO: Sempre que for solicitado uma criação visual ou campanha, você deve gerar um bloco \`\`\`json-brief \`\`\`.
+1. PESQUISA: Use sempre o Google Search para tendências atuais e dados de mercado.
+2. ESTRATÉGIA: Pense no ROI e no impacto da marca ativa.
+3. OUTPUT: Se o usuário pedir qualquer criação visual ou campanha, gere OBRIGATORIAMENTE um bloco \`\`\`json-brief \`\`\`.
 
 ESQUEMA JSON-BRIEF:
 {
@@ -18,45 +18,45 @@ ESQUEMA JSON-BRIEF:
   "publico_target": "Persona detalhada",
   "tom_de_voz": "Atributos de linguagem",
   "cores_hex": ["#HEX1", "#HEX2"],
-  "conceito_criativo": "A grande idéia por trás da peça",
-  "referencias_esteticas": "Estilos de marcas (ex: Apple, Nike, Saint Laurent)",
+  "conceito_criativo": "A grande idéia central",
+  "referencias_esteticas": "Apple, Nike, Saint Laurent style",
   "formatos": ["1080x1080", "9:16"],
   "headline": "Chamada impactante",
-  "descricao_cena": "O que deve acontecer visualmente na imagem principal"
+  "descricao_cena": "O que deve acontecer visualmente na peça principal"
 }
 
-Responda sempre com autoridade estratégica antes do JSON.
+Fale como um executivo de agência antes de entregar o JSON estratégico.
 `;
 
-// AGENTE 2: Diretor de Arte (Prompt Engineering & Visual Direction)
+// AGENTE 2: Diretor de Arte (Design System & Prompt Engineering)
 const ART_DIRECTOR_INSTRUCTION = `
-Você é o Diretor de Arte Sênior da "synapx Agency". Especialista em Imagen 4 e Midjourney.
-Sua única responsabilidade é transformar um Brief Estratégico em prompts de imagem de alta performance.
+Você é o Diretor de Arte Sênior da "synapx Agency". Especialista em Imagen 4.
+Sua única responsabilidade é transformar um Brief Estratégico em prompts de imagem profissionais.
 
 ESTÉTICA OBRIGATÓRIA:
-- Marcas de Referência: Apple (minimalismo), Nike (energia/impacto), Saint Laurent (luxo/noir).
-- Estilo Visual: Cinematic lighting, 8k, ultra-minimalist, depth of field, high-end commercial photography.
-- PROIBIDO: Fotos de banco (stock), pessoas genéricas, rostos falsos sorridentes, layouts poluídos ou amadores.
+- Referências: Apple (minimalismo), Nike (impacto), Saint Laurent (luxo noir).
+- Estilo: Cinematic lighting, 8k, ultra-minimalist, depth of field, high-end commercial photography.
+- PROIBIDO: Fotos de banco (stock), pessoas genéricas sorrindo, layouts poluídos ou amadores.
 
 OUTPUT OBRIGATÓRIO:
-Você deve devolver um bloco \`\`\`json-assets \`\`\` contendo exatamente 5 variações:
-1. Lifestyle: O produto/serviço em uso real e elegante.
-2. Conceitual: Metáfora visual abstrata e poderosa.
-3. Tipográfico: Foco na headline e hierarquia visual (descrita para a IA de imagem).
+Retorne um bloco \`\`\`json-assets \`\`\` com EXATAMENTE 5 variações:
+1. Lifestyle: O produto em uso elegante.
+2. Conceitual: Metáfora visual abstrata.
+3. Tipográfico: Foco na hierarquia visual da headline.
 4. Produto: Close-up macro com iluminação dramática.
-5. Abstrato: Texturas e cores que evocam a sensação da marca.
+5. Abstrato: Texturas e cores que evocam a alma da marca.
 
 ESQUEMA JSON-ASSETS (Array de 5 objetos):
 {
   "name": "Título da Variação",
   "type": "Lifestyle | Conceitual | Tipográfico | Produto | Abstrato",
   "dimensions": "1080x1080",
-  "prompt": "DETAILED TECHNICAL PROMPT IN ENGLISH FOR IMAGEN 4. Include lighting, lens, texture, and no generic text.",
-  "copy": "Legenda curta e poderosa (Copy)",
-  "description": "Por que esta variação funciona?"
+  "prompt": "DETAILED TECHNICAL PROMPT IN ENGLISH. Specific lighting, lens (e.g. 35mm f/1.4), materials, and composition. No text tags.",
+  "copy": "Legenda estratégica curta",
+  "description": "Explicação do design"
 }
 
-NÃO escreva texto explicativo, responda APENAS com o JSON.
+Responda APENAS com o bloco JSON.
 `;
 
 export class GeminiService {
@@ -70,16 +70,12 @@ export class GeminiService {
     const activeBrand = currentState.brands.find(b => b.id === currentState.activeBrandId);
     
     const brandContext = activeBrand 
-      ? `MARCA ATIVA: ${activeBrand.name}. 
-         CONCEITO: ${activeBrand.kit?.concept || 'Premium'}. 
-         LOGO DESCRIÇÃO: ${activeBrand.kit?.logoDescription || 'Design minimalista'}.
-         CORES HEX: ${JSON.stringify(activeBrand.kit?.colors || {})}.
-         TOM DE VOZ: ${activeBrand.kit?.tone?.join(', ') || 'Profissional'}.`
+      ? `MARCA ATIVA: ${activeBrand.name}. CONCEITO: ${activeBrand.kit?.concept}. CORES: ${JSON.stringify(activeBrand.kit?.colors)}.`
       : 'Novos negócios.';
 
     const contents = [
       ...history.map(h => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: h.parts })),
-      { role: 'user', parts: [{ text: `CONTEXTO DA MARCA:\n${brandContext}\n\nSOLICITAÇÃO DO CLIENTE: ${message}` }] }
+      { role: 'user', parts: [{ text: `CONTEXTO MARCA:\n${brandContext}\n\nSOLICITAÇÃO: ${message}` }] }
     ];
 
     const response = await ai.models.generateContent({
@@ -102,16 +98,14 @@ export class GeminiService {
   // Pipeline Agente 2: Diretor de Arte
   async artDirector(briefContent: string) {
     const ai = this.getClient();
-    
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
-      contents: [{ role: 'user', parts: [{ text: `TRANSFORME ESTE BRIEF EM 5 VARIAÇÕES DE DESIGN DE ALTA FIDELIDADE:\n\n${briefContent}` }] }],
+      contents: [{ role: 'user', parts: [{ text: `TRANSFORME ESTE BRIEF EM PROMPTS DE DESIGN MASTER:\n\n${briefContent}` }] }],
       config: {
         systemInstruction: ART_DIRECTOR_INSTRUCTION,
-        temperature: 0.4, // Menor temperatura para seguir o JSON rigidamente
+        temperature: 0.3,
       },
     });
-
     return response.text || '';
   }
 
@@ -120,25 +114,17 @@ export class GeminiService {
     const imageParts = (references || []).map(base64 => ({
       inlineData: { data: base64.split(',')[1], mimeType: "image/png" }
     }));
-
-    const promptText = `Analise a marca "${brandName}". Retorne JSON com name, concept, tone (array), colors (HEX), typography (display/body), logoDescription.`;
-
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
-      contents: { parts: [...imageParts, { text: promptText }] },
+      contents: { parts: [...imageParts, { text: `Analise a marca "${brandName}". Retorne JSON com name, concept, tone (array), colors (HEX), typography (display/body), logoDescription.` }] },
       config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" }
     });
-
-    try {
-      return JSON.parse(response.text || '{}');
-    } catch (e) {
-      throw new Error("Falha na varredura.");
-    }
+    return JSON.parse(response.text || '{}');
   }
 
   async generateImage(prompt: string, brandContext?: string, useHighEnd: boolean = true) {
     const ai = this.getClient();
-    const masterPrompt = `Premium High-End Visual. Style: Minimalist Luxury. Lighting: Cinematic. ${brandContext ? `Context: ${brandContext}.` : ''} Scene: ${prompt}. 8k, shot on RED, commercial photography.`;
+    const masterPrompt = `Commercial High-End Advertising Photography. ${brandContext ? `Brand: ${brandContext}.` : ''} Scene: ${prompt}. Cinematic lighting, 8k, ultra-minimalist, photorealistic.`;
 
     if (useHighEnd) {
       try {
@@ -149,7 +135,7 @@ export class GeminiService {
         });
         return `data:image/png;base64,${response.generatedImages[0].image.imageBytes}`;
       } catch (e) {
-        console.warn("Imagen 4 error, failing back to flash image.");
+        console.warn("Imagen 4 error, falling back...");
       }
     }
 
@@ -157,7 +143,6 @@ export class GeminiService {
       model: 'gemini-2.5-flash-image',
       contents: { parts: [{ text: masterPrompt }] }
     });
-
     const part = response.candidates?.[0]?.content.parts.find(p => p.inlineData);
     return part?.inlineData ? `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` : `https://picsum.photos/1024/1024`;
   }
