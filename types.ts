@@ -22,17 +22,11 @@ export interface UserProfile {
   created_at: string;
 }
 
-export interface CreativeBrief {
-  objetivo: string;
-  publico_target: string;
-  tom_de_voz: string;
-  cores_hex: string[];
-  conceito_criativo: string;
-  referencias_esteticas: string;
-  formatos: string[];
-  headline: string;
-  descricao_cena: string;
-  specialist_type: 'social' | 'copy' | 'mockup' | 'branding' | 'video' | 'music' | 'web';
+export interface IdeaOption {
+  id: string;
+  title: string;
+  description: string;
+  mood: string;
 }
 
 export interface BrandKit {
@@ -57,10 +51,6 @@ export interface BrandKit {
     display: string;
     body: string;
     mono: string;
-  };
-  guidelines?: {
-    do: string[];
-    dont: string[];
   };
 }
 
@@ -91,18 +81,10 @@ export interface DesignAsset {
   description: string;
   copy?: string;
   status?: 'pending' | 'approved' | 'rejected';
+  // isMockup used to identify if an asset is a technical mockup
   isMockup?: boolean;
-  parentAssetId?: string;
   metadata?: any;
   created_at?: string;
-}
-
-export interface MockupTemplate {
-  id: string;
-  name: string;
-  icon: string;
-  description: string;
-  prompt: string;
 }
 
 export interface CampaignState {
@@ -129,5 +111,7 @@ export interface Message {
   timestamp: Date;
   referenceImage?: string;
   groundingSources?: GroundingSource[];
+  ideas?: IdeaOption[];
+  attachedAssetIds?: string[];
   metadata?: any;
 }

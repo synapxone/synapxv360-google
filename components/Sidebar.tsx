@@ -25,7 +25,7 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
     pt: {
       brand: "Portfólio",
       actions: "Workflows Master",
-      newBrand: "CRIAR",
+      newBrand: "CRIAR MARCA",
       edit: "Editar",
       noBrand: "Selecione uma marca",
       generateKit: "INICIAR VARREDURA (SCAN)",
@@ -39,7 +39,7 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
     en: {
       brand: "Portfolio",
       actions: "Master Workflows",
-      newBrand: "CREATE",
+      newBrand: "CREATE BRAND",
       edit: "Edit",
       noBrand: "Select a brand",
       generateKit: "START DEEP SCAN",
@@ -54,8 +54,8 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
 
   const renderWorkflows = () => {
     if (!activeBrand) return (
-      <div className="p-4 bg-neutral-900/20 border border-dashed border-neutral-800 rounded-2xl text-center">
-        <p className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">{t.noBrand}</p>
+      <div className="p-6 bg-neutral-900/20 border border-dashed border-neutral-800 rounded-3xl text-center">
+        <p className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.2em]">{t.noBrand}</p>
       </div>
     );
 
@@ -104,12 +104,12 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
       <div className={`
         fixed inset-y-0 left-0 z-50 flex flex-col bg-neutral-950 border-r border-neutral-900 transition-all duration-500 ease-in-out
         lg:relative lg:translate-x-0
-        ${isMobileOpen ? 'translate-x-0 w-72 md:w-80 shadow-2xl shadow-indigo-600/20' : '-translate-x-full lg:translate-x-0'}
+        ${isMobileOpen ? 'translate-x-0 w-72 md:w-80 shadow-2xl' : '-translate-x-full lg:translate-x-0'}
         ${isCollapsed ? 'lg:w-20' : 'lg:w-72 xl:w-80'}
       `}>
         <button 
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="hidden lg:flex absolute -right-3 top-1/2 -translate-y-1/2 z-[60] w-6 h-12 bg-neutral-900 border border-neutral-800 rounded-full items-center justify-center text-neutral-500 hover:text-white transition-all shadow-xl hover:scale-110 active:scale-95 cursor-pointer"
+          className="hidden lg:flex absolute -right-3 top-1/2 -translate-y-1/2 z-[60] w-6 h-12 bg-neutral-900 border border-neutral-800 rounded-full items-center justify-center text-neutral-500 hover:text-white transition-all shadow-xl hover:scale-110 cursor-pointer"
         >
           <svg className={`w-3 h-3 transition-transform duration-500 ${isCollapsed ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -129,28 +129,41 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
               {(!isCollapsed || isMobileOpen) && (
                 <div className="flex justify-between items-center mb-5 px-1">
                   <h3 className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.2em]">{t.brand}</h3>
-                  <button onClick={() => setIsNewBrandModalOpen(true)} className="w-6 h-6 bg-white/5 hover:bg-white/10 rounded-lg flex items-center justify-center text-indigo-500 transition-all">+</button>
+                  <button onClick={() => setIsNewBrandModalOpen(true)} className="px-3 py-1.5 bg-indigo-600/10 text-indigo-500 border border-indigo-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all">
+                    {t.newBrand}
+                  </button>
                 </div>
               )}
+              
               <div className="space-y-3">
                 {state.brands.map(brand => (
                   <div key={brand.id} className="group relative">
                     <button 
                       onClick={() => onSwitchBrand(brand.id)}
-                      className={`w-full flex items-center gap-4 p-3.5 rounded-[24px] border transition-all ${state.activeBrandId === brand.id ? 'bg-neutral-900 border-indigo-500/50 shadow-2xl' : 'bg-black border-neutral-900 hover:border-neutral-800'} ${isCollapsed && !isMobileOpen ? 'lg:justify-center lg:p-2' : ''}`}
+                      className={`w-full flex items-center gap-4 p-3 rounded-[24px] border transition-all ${state.activeBrandId === brand.id ? 'bg-neutral-900 border-indigo-500/50 shadow-2xl' : 'bg-black border-neutral-900 hover:border-neutral-800'} ${isCollapsed && !isMobileOpen ? 'lg:justify-center lg:p-2' : ''}`}
                     >
-                      <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-inner shrink-0" style={{ backgroundColor: brand.kit?.colors?.primary || '#333' }}>
+                      <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-white font-bold text-lg shadow-inner shrink-0" style={{ backgroundColor: brand.kit?.colors?.primary || '#333' }}>
                         {brand.name.charAt(0)}
                       </div>
                       {(!isCollapsed || isMobileOpen) && (
                         <div className="text-left min-w-0 flex-1">
                           <p className="text-xs font-black text-white truncate uppercase tracking-tighter">{brand.name}</p>
-                          <p className="text-[9px] text-neutral-500 font-mono truncate">{brand.kit?.services?.[0] || 'Market Authority'}</p>
+                          <p className="text-[8px] text-neutral-600 font-mono truncate uppercase tracking-widest">{brand.kit?.concept || 'Market Authority'}</p>
                         </div>
                       )}
                     </button>
                   </div>
                 ))}
+                
+                {state.brands.length === 0 && !isCollapsed && (
+                  <button 
+                    onClick={() => setIsNewBrandModalOpen(true)}
+                    className="w-full flex items-center justify-center gap-3 p-6 border-2 border-dashed border-neutral-800 rounded-3xl text-neutral-600 hover:border-indigo-500/50 hover:text-indigo-400 transition-all"
+                  >
+                    <span className="text-2xl">+</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest">Nova Marca</span>
+                  </button>
+                )}
               </div>
             </section>
 
@@ -179,7 +192,6 @@ const Sidebar: React.FC<SidebarProps> = ({ state, onClear, onSendMessage, onUpda
           )}
         </div>
         
-        {/* Modal apenas para criação inicial de nova marca */}
         {isNewBrandModalOpen && (
           <BrandManager 
             language={language} 

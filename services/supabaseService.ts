@@ -49,7 +49,6 @@ export const supabaseService = {
       copy: a.copy,
       status: a.status,
       isMockup: a.is_mockup,
-      description: '',
       metadata: a.metadata,
       created_at: a.created_at
     }));
@@ -85,6 +84,10 @@ export const supabaseService = {
 
   async deleteAsset(assetId: string) {
     return await supabase.from('assets').delete().eq('id', assetId);
+  },
+
+  async updateGroupTitle(groupId: string, newTitle: string) {
+    return await supabase.from('assets').update({ group_title: newTitle }).eq('group_id', groupId);
   },
 
   async saveBrand(userId: string, brand: Brand) {
@@ -124,25 +127,12 @@ export const supabaseService = {
     }, { onConflict: 'user_id' });
   },
 
-  async getPlans(): Promise<Plan[]> {
-    const { data } = await supabase.from('plans').select('*').eq('is_active', true).order('price', { ascending: true });
-    return data || [];
-  },
-
   async uploadBrandLogo(userId: string, brandId: string, file: File): Promise<string> {
     const ext = file.name.split('.').pop();
     const path = `brands/${userId}/${brandId}/logo.${ext}`;
-
-    const { error } = await supabase.storage
-      .from('brand-assets')
-      .upload(path, file, { upsert: true });
-
+    const { error } = await supabase.storage.from('brand-assets').upload(path, file, { upsert: true });
     if (error) throw error;
-
-    const { data } = supabase.storage
-      .from('brand-assets')
-      .getPublicUrl(path);
-
+    const { data } = supabase.storage.from('brand-assets').getPublicUrl(path);
     return data.publicUrl;
   }
 };

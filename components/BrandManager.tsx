@@ -18,12 +18,13 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
   const [instagram, setInstagram] = useState(brand?.instagram || '');
   const [visualRefs, setVisualRefs] = useState<string[]>(brand?.visualReferences || []);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState<string | null>(null);
   
   const [kit, setKit] = useState<BrandKit>(brand?.kit || {
     name: brand?.name || '',
     concept: '',
     tone: [],
-    colors: { primary: '#333333', secondary: '#666666', accent: '#indigo-500', neutralLight: '#f5f5f5', neutralDark: '#111111' },
+    colors: { primary: '#333333', secondary: '#666666', accent: '#6366f1', neutralLight: '#f5f5f5', neutralDark: '#111111' },
     typography: { display: 'Inter', body: 'Inter', mono: 'JetBrains Mono' }
   });
   
@@ -55,7 +56,8 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
       typo: "Tipografia",
       tone: "Tom de Voz",
       approval: "Ajuste os detalhes ou re-escaneie para atualizar o DNA.",
-      error: "Erro na varredura. Verifique os links e tente novamente."
+      error: "Erro na varredura. Verifique os links e tente novamente.",
+      uploading: "Subindo..."
     },
     en: {
       title: brand && brand.id.includes('-') ? "Edit Identity" : "New Brand",
@@ -76,7 +78,8 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
       typo: "Typography",
       tone: "Tone of Voice",
       approval: "Adjust details or re-scan to update DNA.",
-      error: "Scan error. Please check links and try again."
+      error: "Scan error. Please check links and try again.",
+      uploading: "Uploading..."
     }
   }[language === 'es' ? 'en' : language];
 
@@ -102,7 +105,10 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
 
   const handleAssetUpload = async (type: 'logo' | 'symbol' | 'icon' | 'variation', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && userId && brand?.id) {
+    if (!file) return;
+    
+    setIsUploading(type);
+    if (userId && brand?.id && brand.id.includes('-')) {
       try {
         const publicUrl = await supabaseService.uploadBrandLogo(userId, brand.id, file);
         setKit(prev => {
@@ -114,9 +120,12 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
         });
       } catch (err) {
         console.error("Upload error", err);
+        setError("Erro no upload do arquivo.");
+      } finally {
+        setIsUploading(null);
       }
-    } else if (file) {
-      // Fallback for new brands without ID yet
+    } else {
+      // Fallback for new brands without ID yet or temporary preview
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
@@ -127,6 +136,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
           if (type === 'variation') return { ...prev, logoVariations: [...(prev.logoVariations || []), result] };
           return prev;
         });
+        setIsUploading(null);
       };
       reader.readAsDataURL(file);
     }
@@ -161,7 +171,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
       });
       onClose();
     } catch (err) {
-      setError(t.error);
+      setError("Erro ao salvar. Tente novamente.");
     } finally {
       setIsSaving(false);
     }
@@ -171,7 +181,12 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
     <div className="space-y-2">
       <label className="text-[9px] font-black text-neutral-600 uppercase tracking-widest block">{label}</label>
       <div className="relative group aspect-square bg-black border border-neutral-800 rounded-xl overflow-hidden flex items-center justify-center">
-        {value ? (
+        {isUploading === type ? (
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">{t.uploading}</span>
+          </div>
+        ) : value ? (
           <>
             <img src={value} className="w-full h-full object-contain p-2" alt={label} />
             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
@@ -265,7 +280,7 @@ const BrandManager: React.FC<BrandManagerProps> = ({ brand, language, onSave, on
                   <div className="space-y-2">
                     <label className="text-[9px] font-black text-neutral-600 uppercase tracking-widest block">{t.variations}</label>
                     <label className="aspect-square bg-neutral-900/50 border-2 border-dashed border-neutral-800 rounded-xl flex items-center justify-center cursor-pointer hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all text-neutral-600">
-                      <span className="text-xl">+</span>
+                      {isUploading === 'variation' ? <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div> : <span className="text-xl">+</span>}
                       <input type="file" className="hidden" multiple onChange={(e) => handleAssetUpload('variation', e)} accept="image/*" />
                     </label>
                   </div>
