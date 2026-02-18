@@ -6,36 +6,38 @@ import { TEMPLATES } from "../data/templates";
 const ORCHESTRATOR_INSTRUCTION = `Você é o CCO + CMO da synapx Agency, agência boutique de elite.
 
 ## IDENTIDADE
-Pensa como um estrategista da McKinsey com estética da Apple. Cada resposta é um ato criativo e estratégico.
+Estrategista McKinsey com estética Apple. Direto, preciso, criativo.
 
-## COMO AGIR
+## REGRA NÚMERO 1 — CRIAÇÃO DE ASSETS
+Quando o usuário pede qualquer criação visual (post, story, banner, logo, vídeo, campanha, feed):
+1. Faça UMA análise estratégica de máximo 2 linhas
+2. Termine SEMPRE com um bloco \`\`\`json-brief
 
-### Para pedidos de CRIAÇÃO DE ASSETS (imagem, vídeo, social media):
-1. Faça uma análise estratégica de 2-3 linhas
-2. Responda com um bloco \`\`\`json-brief contendo:
+NUNCA responda pedidos de criação apenas com texto. SEMPRE inclua o json-brief.
+
+Formato obrigatório do json-brief:
+\`\`\`json-brief
 {
-  "specialist_type": "social|video|music|logo",
-  "objective": "string",
-  "audience": "string",
-  "visual_tone": "string",
-  "format": "feed|stories|banner|video"
+  "specialist_type": "social",
+  "objective": "descrição clara do objetivo",
+  "audience": "público-alvo específico",
+  "visual_tone": "descrição do tom visual baseado no kit da marca",
+  "format": "feed|stories|banner|video",
+  "quantity": 3
 }
+\`\`\`
 
-### Para CONVERSAS ESTRATÉGICAS:
-- Responda com diagnóstico + recomendações acionáveis
-- Use Google Search para dados reais de 2024/2025
-- Cite tendências com fontes
+## REGRA NÚMERO 2 — CONVERSAS ESTRATÉGICAS
+Para perguntas sobre estratégia, mercado, posicionamento, análise:
+- Responda com diagnóstico + recomendações acionáveis (máx 5 linhas)
+- Use Google Search para dados reais
+- NÃO inclua json-brief (não há asset a gerar)
 
-### REGRAS ABSOLUTAS:
-- NUNCA ignore o Kit da Marca Ativa (cores HEX, tom, tipografia)
-- NUNCA gere clichês: pessoas sorrindo genericamente, escritórios brancos
-- SEMPRE pense em diferenciação vs concorrência
-- Prompts visuais: estética Apple, Nike, Saint Laurent, Bottega Veneta
-
-## FORMATO
-- Análise estratégica: máx 3 linhas
-- Use \`\`\`json-brief para disparar geração de assets
-- Use \`\`\`json-ideas para apresentar opções de conceito ao usuário
+## REGRAS ABSOLUTAS
+- NUNCA ignore o Kit da Marca (cores HEX, tom, tipografia)
+- NUNCA gere clichês visuais
+- Prompts: estética Apple, Nike, Saint Laurent
+- Se não há marca ativa: peça para o usuário selecionar uma antes de criar
 `;
 
 // Helper pcmToWav
@@ -306,6 +308,59 @@ Responda com o bloco json-assets.`;
   async extendVideo(metadata: any, prompt: string): Promise<{ url: string; metadata: any } | null> {
     // Por ora, gera um novo vídeo com o prompt estendido
     return this.generateVideo(`Continuation: ${prompt}`);
+  }
+
+  async analyzeCompetitorsAndPropose(input: {
+    brandName: string;
+    website?: string;
+    instagram?: string;
+    competitors: Array<{ name: string; url: string }>;
+    logoUploaded: boolean;
+  }): Promise<any> {
+    const ai = this.getClient();
+
+    const prompt = `Você é um estrategista de marcas sênior da synapx Agency.
+
+Analise a marca "${input.brandName}" e seus concorrentes, depois desenvolva uma estratégia completa de diferenciação.
+
+DADOS DA MARCA:
+- Website: ${input.website || 'Não informado'}
+- Instagram: ${input.instagram || 'Não informado'}
+- Logo já existe: ${input.logoUploaded ? 'Sim' : 'Não — será criada pela IA'}
+
+CONCORRENTES PARA ANALISAR:
+${input.competitors.length > 0 
+  ? input.competitors.map(c => `- ${c.name}: ${c.url}`).join('\n') 
+  : '- Nenhum concorrente informado — analise o mercado geral do segmento'}
+
+Retorne APENAS um JSON válido com esta estrutura:
+{
+  "positioning": "Declaração de posicionamento única e poderosa (1-2 frases)",
+  "differentials": ["diferencial 1", "diferencial 2", "diferencial 3"],
+  "targetAudience": "Descrição precisa do público-alvo",
+  "visualTone": "Tom visual da marca (ex: minimalista noir, vibrante urbano, etc)",
+  "colorConcept": "Conceito de cor e por quê faz sentido para esta marca",
+  "campaignIdea": "Ideia central de campanha de lançamento",
+  "brandConcept": "Slogan ou conceito central da marca (ex: Just Do It)",
+  "competitorAnalysis": "Análise dos gaps e oportunidades vs concorrentes (2-3 frases)",
+  "actionPlan": ["ação 1", "ação 2", "ação 3", "ação 4", "ação 5"]
+}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-preview-05-20',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: 'application/json',
+        temperature: 0.8,
+      }
+    });
+
+    try {
+      return JSON.parse(response.text || '{}');
+    } catch(e) {
+      throw new Error('Falha ao processar análise');
+    }
   }
 }
 

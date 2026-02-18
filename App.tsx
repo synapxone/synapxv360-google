@@ -9,6 +9,7 @@ import Workspace from './components/Workspace';
 import LandingPage from './components/LandingPage';
 import Auth from './components/Auth';
 import BrandManager from './components/BrandManager';
+import BrandOnboarding from './components/BrandOnboarding';
 
 export type LoadingStage = 'idle' | 'thinking' | 'briefing' | 'generating' | 'syncing';
 
@@ -17,7 +18,10 @@ const App: React.FC = () => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [language, setLanguage] = useState<Language>('pt');
   const [state, setState] = useState<CampaignState>({ brands: [], activeBrandId: null, assets: [], brief: null });
-  const [messages, setMessages] = useState<Message[]>([]);
+  
+  // Refatorado: mensagens por marca
+  const [messagesByBrand, setMessagesByBrand] = useState<Record<string, Message[]>>({});
+  
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState<LoadingStage>('idle');
   const [activeTab, setActiveTab] = useState<'chat' | 'workspace' | 'brand'>('chat');
@@ -27,16 +31,31 @@ const App: React.FC = () => {
   
   const [isNewBrandModalOpen, setIsNewBrandModalOpen] = useState(false);
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
+  
+  const [onboardingBrand, setOnboardingBrand] = useState<Brand | null>(null);
 
   const requestCounter = useRef(0);
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
 
+  // Helper para acessar mensagens da marca ativa
+  const currentBrandMessages = state.activeBrandId 
+    ? (messagesByBrand[state.activeBrandId] || []) 
+    : [];
+
+  const setCurrentMessages = (updater: Message[] | ((prev: Message[]) => Message[])) => {
+    if (!state.activeBrandId) return;
+    const brandId = state.activeBrandId;
+    setMessagesByBrand(prev => ({
+      ...prev,
+      [brandId]: typeof updater === 'function' 
+        ? updater(prev[brandId] || []) 
+        : updater
+    }));
+  };
+
   // Função auxiliar para fundir assets do DB com legado sem duplicatas
   const mergeAssets = (dbAssets: DesignAsset[], legacyAssets: DesignAsset[]) => {
-    // Assets do DB têm prioridade. Legado entra apenas se não houver asset no DB com mesmo ID (improvável, pois IDs mudam)
-    // Mas o principal é garantir que mostremos ambos.
-    // Legacy assets geralmente não têm UUID, então dificilmente colidem com DB assets.
     return [...dbAssets, ...legacyAssets];
   };
 
@@ -54,17 +73,14 @@ const App: React.FC = () => {
         if (profile) {
           setUserProfile(profile);
 
-          // FALLBACK LOGIC: Se não houver marcas no DB (nova arquitetura), tenta carregar do JSON legado (antiga arquitetura)
           const legacyBrands = (project?.data?.state_data?.brands || []) as Brand[];
           const finalBrands = brands.length > 0 ? brands : legacyBrands;
 
           const savedActiveBrandId = project?.data?.state_data?.activeBrandId;
-          // Garante que o ID ativo exista na lista final de marcas
           const finalActiveBrandId = finalBrands.some(b => b.id === savedActiveBrandId)
             ? savedActiveBrandId
             : (finalBrands[0]?.id || null);
 
-          // MERGE LOGIC: DB + Legacy Assets
           const legacyAssets = (project?.data?.state_data?.assets || []) as DesignAsset[];
           const finalAssets = mergeAssets(assets, legacyAssets);
 
@@ -75,11 +91,16 @@ const App: React.FC = () => {
             brief: project?.data?.state_data?.brief || null 
           });
 
-          if (project?.data?.message_history) {
-            setMessages(project.data.message_history.map((m: any) => ({
-              ...m,
-              timestamp: new Date(m.timestamp)
-            })));
+          // Carregar histórico no mapa por marca
+          const savedBrandId = finalActiveBrandId;
+          if (savedBrandId && project?.data?.message_history) {
+            setMessagesByBrand(prev => ({
+              ...prev,
+              [savedBrandId]: project.data.message_history.map((m: any) => ({
+                ...m,
+                timestamp: new Date(m.timestamp)
+              }))
+            }));
           }
           setViewMode('app');
         }
@@ -117,11 +138,16 @@ const App: React.FC = () => {
             brief: project?.data?.state_data?.brief || null 
           });
 
-          if (project?.data?.message_history) {
-            setMessages(project.data.message_history.map((m: any) => ({
-              ...m,
-              timestamp: new Date(m.timestamp)
-            })));
+          // Carregar histórico no mapa por marca
+          const savedBrandId = finalActiveBrandId;
+          if (savedBrandId && project?.data?.message_history) {
+            setMessagesByBrand(prev => ({
+              ...prev,
+              [savedBrandId]: project.data.message_history.map((m: any) => ({
+                ...m,
+                timestamp: new Date(m.timestamp)
+              }))
+            }));
           }
           setViewMode('app');
         }
@@ -129,7 +155,7 @@ const App: React.FC = () => {
         setViewMode('landing');
         setUserProfile(null);
         setState({ brands: [], activeBrandId: null, assets: [], brief: null });
-        setMessages([]);
+        setMessagesByBrand({});
       }
     });
 
@@ -146,25 +172,35 @@ const App: React.FC = () => {
         return;
       }
       if (data) {
+        // Se é uma nova marca, disparar onboarding em vez de ir direto ao app
+        const isNewBrand = !brand.kit || !brand.kit.concept;
+        if (isNewBrand && data) {
+          setOnboardingBrand(data);
+          return; // Não continua o fluxo normal — onboarding vai completar
+        }
+
         setState(prev => {
-          // Detecta se houve migração de ID (Legado -> DB)
           const isMigration = brand.id !== data.id;
-          
           const filteredBrands = prev.brands.filter(br => br.id !== data.id && br.id !== brand.id);
           
-          // Se houve migração de Marca, migrar também os Assets associados para o novo ID
           let updatedAssets = prev.assets;
           if (isMigration) {
             updatedAssets = prev.assets.map(a => 
               a.brand_id === brand.id ? { ...a, brand_id: data.id } : a
             );
-            
-            // Background Sync: Salvar assets migrados no DB para persistir a mudança
             updatedAssets.forEach(async (asset) => {
               if (asset.brand_id === data.id) {
-                 // Salva silenciosamente para migrar para a tabela 'assets'
                  await supabaseService.saveAsset(userProfile.id, asset);
               }
+            });
+            
+            // Migrar mensagens também
+            setMessagesByBrand(prevMsgs => {
+              const msgs = prevMsgs[brand.id] || [];
+              const newMap = { ...prevMsgs };
+              delete newMap[brand.id];
+              newMap[data.id] = msgs;
+              return newMap;
             });
           }
 
@@ -194,6 +230,12 @@ const App: React.FC = () => {
         activeBrandId: prev.activeBrandId === id ? (newBrands[0]?.id || null) : prev.activeBrandId 
       };
     });
+    
+    setMessagesByBrand(prev => {
+      const newMap = { ...prev };
+      delete newMap[id];
+      return newMap;
+    });
   };
 
   const handleSendMessage = useCallback(async (content: string, image?: string, targetGroupId?: string) => {
@@ -213,12 +255,12 @@ const App: React.FC = () => {
       metadata: { groupId } 
     };
     
-    setMessages(prev => [...prev, userMsg]);
+    setCurrentMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
     setLoadingStage('thinking');
 
     try {
-      const { text, sources } = await gemini.chat(content, image || null, messages, state, language);
+      const { text, sources } = await gemini.chat(content, image || null, currentBrandMessages, state, language);
       if (currentRequestId !== requestCounter.current) return;
 
       let ideas: IdeaOption[] | undefined;
@@ -234,14 +276,33 @@ const App: React.FC = () => {
         ideas
       };
 
-      setMessages(prev => [...prev, assistantMsg]);
+      setCurrentMessages(prev => [...prev, assistantMsg]);
 
+      // Detectar json-brief com fallback robusto
       const briefMatch = text.match(/```json-brief\n([\s\S]*?)\n```/);
+      let brief: any = null;
+      const activeBrand = state.brands.find(b => b.id === state.activeBrandId);
+
       if (briefMatch) {
+        try {
+          brief = JSON.parse(briefMatch[1]);
+        } catch(e) {
+          console.warn('json-brief parse error, trying fallback');
+          brief = {
+            specialist_type: 'social',
+            objective: content,
+            audience: activeBrand?.kit?.concept || 'público geral',
+            visual_tone: activeBrand?.kit?.tone?.join(', ') || 'profissional',
+            format: content.toLowerCase().includes('storie') ? 'stories' : 'feed',
+            quantity: 3
+          };
+        }
+      }
+
+      if (brief) {
         if (currentRequestId !== requestCounter.current) return;
         setLoadingStage('briefing');
-        const brief = JSON.parse(briefMatch[1]);
-        const activeBrand = state.brands.find(b => b.id === state.activeBrandId);
+        
         const brandCtx = activeBrand ? { colors: activeBrand.kit?.colors, tone: activeBrand.kit?.tone } : {};
         
         const specialistRaw = await gemini.runSpecialist(brief, brandCtx);
@@ -290,7 +351,7 @@ const App: React.FC = () => {
             }
           }
           setState(prev => ({ ...prev, assets: [...newAssets, ...prev.assets] }));
-          setMessages(prev => prev.map(m => m.id === assistantMsg.id ? { ...m, attachedAssetIds: assetIds } : m));
+          setCurrentMessages(prev => prev.map(m => m.id === assistantMsg.id ? { ...m, attachedAssetIds: assetIds } : m));
         }
       }
     } catch (e) { 
@@ -301,14 +362,14 @@ const App: React.FC = () => {
         setLoadingStage('idle'); 
       }
     }
-  }, [userProfile, state, messages, language, assetQuantity, activeGroupId]);
+  }, [userProfile, state, messagesByBrand, language, assetQuantity, activeGroupId]);
 
   const handleAssetStatus = async (id: string, status: 'approved' | 'rejected') => {
     if (status === 'rejected') {
       if (!window.confirm("Deseja deletar permanentemente este ativo?")) return;
       await supabaseService.deleteAsset(id);
       setState(prev => ({ ...prev, assets: prev.assets.filter(a => a.id !== id) }));
-      setMessages(prev => prev.map(m => ({ ...m, attachedAssetIds: m.attachedAssetIds?.filter(aid => aid !== id) })));
+      setCurrentMessages(prev => prev.map(m => ({ ...m, attachedAssetIds: m.attachedAssetIds?.filter(aid => aid !== id) })));
     } else {
       const asset = state.assets.find(a => a.id === id);
       if (asset) {
@@ -349,7 +410,7 @@ const App: React.FC = () => {
     if (!window.confirm("Deseja deletar permanentemente toda esta pasta e seus ativos?")) return;
     await supabaseService.deleteAssetsByGroup(groupId);
     setState(prev => ({ ...prev, assets: prev.assets.filter(a => a.group_id !== groupId) }));
-    setMessages(prev => prev.map(m => ({ ...m, attachedAssetIds: m.attachedAssetIds?.filter(aid => {
+    setCurrentMessages(prev => prev.map(m => ({ ...m, attachedAssetIds: m.attachedAssetIds?.filter(aid => {
       const asset = state.assets.find(a => a.id === aid);
       return asset?.group_id !== groupId;
     }) })));
@@ -424,7 +485,7 @@ const App: React.FC = () => {
         <div className="flex-1 relative overflow-hidden">
           {activeTab === 'chat' ? (
             <ChatArea 
-              messages={messages} 
+              messages={currentBrandMessages} 
               onSendMessage={handleSendMessage} 
               isLoading={isLoading} 
               loadingStage={loadingStage} 
@@ -483,6 +544,25 @@ const App: React.FC = () => {
             await handleDeleteBrand(id);
             setIsNewBrandModalOpen(false);
             setEditingBrand(null);
+          }}
+        />
+      )}
+
+      {/* Onboarding de nova marca */}
+      {onboardingBrand && (
+        <BrandOnboarding
+          brand={onboardingBrand}
+          language={language}
+          onComplete={async (updatedBrand) => {
+            setOnboardingBrand(null);
+            await handleUpdateBrand(updatedBrand);
+            setState(p => ({ ...p, activeBrandId: updatedBrand.id }));
+          }}
+          onSkip={() => {
+            setOnboardingBrand(null);
+            if (onboardingBrand) {
+              setState(p => ({ ...p, activeBrandId: onboardingBrand.id }));
+            }
           }}
         />
       )}

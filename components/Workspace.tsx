@@ -268,19 +268,36 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onUpdateAssets, onSendMess
               <div className="flex gap-2 pt-2 border-t border-white/5">
                 <button 
                   onClick={() => setEditingAsset(asset)} 
-                  className="flex-1 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-white text-[9px] font-black rounded-xl uppercase tracking-widest transition-all"
+                  title="Editor"
+                  className="flex-none w-9 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white text-xs rounded-xl flex items-center justify-center transition-all"
                 >
-                  Editor
+                  ✏️
                 </button>
                 <button 
-                  onClick={() => setPreviewAsset(asset)} 
-                  className="flex-1 py-2.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white text-[9px] font-black rounded-xl uppercase tracking-widest transition-all"
+                  onClick={() => setPreviewAsset(asset)}
+                  title="Preview em Mockup"
+                  className="flex-none w-9 py-2.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white text-xs rounded-xl flex items-center justify-center transition-all"
                 >
-                  Mockup
+                  👁
+                </button>
+                <button 
+                  onClick={() => handleDownload(asset)}
+                  title="Download"
+                  className="flex-1 py-2.5 bg-neutral-800 hover:bg-green-600 text-neutral-400 hover:text-white text-[9px] font-black rounded-xl uppercase tracking-widest transition-all"
+                >
+                  ↓ DL
+                </button>
+                <button 
+                  onClick={() => handleDownload(asset, true)}
+                  title="Download com Logo"
+                  className="flex-1 py-2.5 bg-neutral-800 hover:bg-indigo-600 text-neutral-400 hover:text-white text-[9px] font-black rounded-xl uppercase tracking-widest transition-all"
+                >
+                  ↓ +Logo
                 </button>
                 <button 
                    onClick={() => handleToggleTopPerformer(asset)}
-                   className={`w-9 py-2.5 rounded-xl text-xs flex items-center justify-center transition-all ${asset.performance?.feedback === 'top_performer' ? 'bg-yellow-500 text-black' : 'bg-neutral-800 text-neutral-500 hover:text-yellow-400'}`}
+                   title="Top Performer"
+                   className={`flex-none w-9 py-2.5 rounded-xl text-xs flex items-center justify-center transition-all ${asset.performance?.feedback === 'top_performer' ? 'bg-yellow-500 text-black' : 'bg-neutral-800 text-neutral-500 hover:text-yellow-400'}`}
                 >
                    ⭐
                 </button>

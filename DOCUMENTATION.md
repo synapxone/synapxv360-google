@@ -148,12 +148,28 @@ synapx Agency é uma plataforma de marketing full-service alimentada por IA (Gem
 - ✅ **ChatArea.tsx**: Atualizada interface de props para receber `allAssets` e callbacks. Implementado `AssetCard` com botões abaixo da imagem e renderização inline de assets gerados.
 - ✅ **Workspace.tsx**: Refatoração visual dos cards da galeria. Botões de ação movidos para área dedicada abaixo da imagem, eliminando o problema de overlay que escondia o conteúdo.
 
+---
+### 2024-05-23 — Fix: Conversa por Marca + IA Gera Assets + Download (v388)
+
+**O que foi feito:**
+- ✅ **Isolamento de Chat**: O `App.tsx` agora gerencia mensagens segregadas por marca (`messagesByBrand`). Alternar entre marcas no menu lateral troca instantaneamente o contexto da conversa.
+- ✅ **Geração Forçada**: A `ORCHESTRATOR_INSTRUCTION` no `geminiService` foi blindada para exigir `json-brief` em qualquer pedido visual, corrigindo o bug onde a IA apenas "conversava" sobre criar em vez de criar de fato.
+- ✅ **Download Direto**: Botões de download (simples e com logo) adicionados aos cards da biblioteca no `Workspace.tsx`, conectando a funcionalidade de composição de imagem existente.
+
+---
+### 2024-05-23 — Feature: Brand Onboarding Wizard (v389)
+
+**O que foi feito:**
+- ✅ **BrandOnboarding.tsx**: Novo wizard de 6 steps para novas marcas que substitui o fluxo manual. Inclui upload de assets, definição de presença digital e análise de concorrência.
+- ✅ **IA Analítica**: Novo método `analyzeCompetitorsAndPropose` no `geminiService` que cruza dados da marca e concorrentes para gerar estratégia (posicionamento, diferenciais, tom).
+- ✅ **Fluxo Automatizado**: `App.tsx` agora intercepta a criação de novas marcas e redireciona para o onboarding. Ao final, a marca é salva com brandbook completo e assets iniciais gerados.
+
 **Arquivos modificados:**
+- `components/BrandOnboarding.tsx` (novo)
 - `services/geminiService.ts`
-- `components/ChatArea.tsx`
-- `components/Workspace.tsx`
+- `App.tsx`
 
 **Decisão técnica:**
-- Separação rigorosa entre visualização do asset e controles de ação para evitar conflitos de UX em dispositivos touch e desktops.
-- Adoção de Veo 2.0 para geração de vídeo com polling de status para garantir a entrega do asset final.
+- O onboarding roda em cima da interface principal (z-index alto) para manter o contexto, mas bloqueia interações até a conclusão ou skip.
+- A geração de assets no final do onboarding (logo, posts) é sequencial para dar feedback visual de progresso ao usuário.
 ---
