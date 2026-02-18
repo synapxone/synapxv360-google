@@ -22,12 +22,14 @@ const App: React.FC = () => {
   // Refatorado: mensagens por marca
   const [messagesByBrand, setMessagesByBrand] = useState<Record<string, Message[]>>({});
   
+  // Refatorado: activeGroupId por marca para isolamento de contexto
+  const [activeGroupIdByBrand, setActiveGroupIdByBrand] = useState<Record<string, string | null>>({});
+
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState<LoadingStage>('idle');
   const [activeTab, setActiveTab] = useState<'chat' | 'workspace' | 'brand'>('chat');
   const [assetQuantity, setAssetQuantity] = useState(1);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   
   const [isNewBrandModalOpen, setIsNewBrandModalOpen] = useState(false);
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
@@ -52,6 +54,17 @@ const App: React.FC = () => {
         ? updater(prev[brandId] || []) 
         : updater
     }));
+  };
+
+  // Helper para acessar e setar o groupId da marca ativa
+  const activeGroupId = state.activeBrandId 
+    ? (activeGroupIdByBrand[state.activeBrandId] || null) 
+    : null;
+
+  const setActiveGroupId = (groupId: string | null) => {
+    if (!state.activeBrandId) return;
+    const brandId = state.activeBrandId;
+    setActiveGroupIdByBrand(prev => ({ ...prev, [brandId]: groupId }));
   };
 
   // Função auxiliar para fundir assets do DB com legado sem duplicatas
@@ -426,7 +439,10 @@ const App: React.FC = () => {
 
   const handleRetakeConversation = (groupId: string, title: string) => {
     setActiveTab('chat');
-    setActiveGroupId(groupId);
+    // Setar no mapa da marca ativa
+    if (state.activeBrandId) {
+      setActiveGroupIdByBrand(prev => ({ ...prev, [state.activeBrandId!]: groupId }));
+    }
     handleSendMessage(`Vamos retomar o projeto na pasta "${title}". Qual o próximo passo?`, undefined, groupId);
   };
 
@@ -446,7 +462,6 @@ const App: React.FC = () => {
         onEditBrand={(brand) => setEditingBrand(brand)}
         onSwitchBrand={(id) => {
           setState(p => ({ ...p, activeBrandId: id }));
-          setActiveGroupId(null);
         }}
         language={language} 
         setLanguage={setLanguage} 

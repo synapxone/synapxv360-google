@@ -5,7 +5,7 @@ import { TEMPLATES } from '../data/templates';
 
 interface ChatAreaProps {
   messages: Message[];
-  onSendMessage: (content: string, image?: string, metadata?: any) => void;
+  onSendMessage: (content: string, image?: string, targetGroupId?: string) => void;
   isLoading: boolean;
   loadingStage?: string;
   language: Language;
@@ -36,7 +36,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({
 
   const handleSelectTemplate = (templateId: string) => {
     const template = TEMPLATES.find(t => t.id === templateId);
-    onSendMessage(`Criar campanha usando o template "${template?.name}" para ${activeBrand?.name}`, undefined, { template_id: templateId });
+    onSendMessage(`Criar campanha usando o template "${template?.name}" para ${activeBrand?.name}`, undefined);
     setShowTemplates(false);
   };
 
@@ -221,7 +221,11 @@ const ChatArea: React.FC<ChatAreaProps> = ({
           {quickPrompts.map((p, i) => (
             <button 
               key={i} 
-              onClick={() => onSendMessage(`${p[language === 'en' ? 'en' : 'pt']} para ${activeBrand?.name || 'minha marca'}`)}
+              onClick={() => onSendMessage(
+                `${p[language === 'en' ? 'en' : 'pt']} para ${activeBrand?.name || 'minha marca'}`,
+                undefined,
+                undefined
+              )}
               className="whitespace-nowrap flex items-center gap-2 px-4 py-2 bg-neutral-900/50 hover:bg-indigo-600 border border-white/5 rounded-full text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-white transition-all backdrop-blur-md"
             >
               <span>{p.icon}</span>

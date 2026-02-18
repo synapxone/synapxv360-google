@@ -164,12 +164,19 @@ synapx Agency é uma plataforma de marketing full-service alimentada por IA (Gem
 - ✅ **IA Analítica**: Novo método `analyzeCompetitorsAndPropose` no `geminiService` que cruza dados da marca e concorrentes para gerar estratégia (posicionamento, diferenciais, tom).
 - ✅ **Fluxo Automatizado**: `App.tsx` agora intercepta a criação de novas marcas e redireciona para o onboarding. Ao final, a marca é salva com brandbook completo e assets iniciais gerados.
 
-**Arquivos modificados:**
-- `components/BrandOnboarding.tsx` (novo)
-- `services/geminiService.ts`
-- `App.tsx`
+---
+### 2024-05-23 — Fix: Correções Secundárias (v390)
 
-**Decisão técnica:**
-- O onboarding roda em cima da interface principal (z-index alto) para manter o contexto, mas bloqueia interações até a conclusão ou skip.
-- A geração de assets no final do onboarding (logo, posts) é sequencial para dar feedback visual de progresso ao usuário.
+**O que foi feito:**
+- ✅ **App.tsx**: activeGroupId migrado para Record<brandId, groupId> — isolamento completo por marca.
+- ✅ **App.tsx**: onSwitchBrand simplificado (não precisa mais limpar groupId manualmente).
+- ✅ **supabaseService.ts**: updated_at adicionado ao payload do saveBrand.
+- ✅ **Workspace.tsx**: onExtendVideo conectado — modal de extensão de vídeo com prompt personalizado.
+- ✅ **ChatArea.tsx**: assinatura de onSendMessage alinhada nos atalhos rápidos e templates.
+
+**Arquivos modificados:**
+- `App.tsx`
+- `services/supabaseService.ts`
+- `components/Workspace.tsx`
+- `components/ChatArea.tsx`
 ---

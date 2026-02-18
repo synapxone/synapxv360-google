@@ -73,7 +73,7 @@ export const supabaseService = {
       .from('brands')
       .select('*')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .order('updated_at', { ascending: false, nullsFirst: false }); // Updated sorting
     if (error) { console.error('getBrands error:', error); return []; }
     return (data || []).map(mapBrandFromDb);
   },
@@ -87,6 +87,7 @@ export const supabaseService = {
       brand_kit: brand.kit || {},
       visual_references: brand.visualReferences || [],
       competitor_websites: brand.competitorWebsites || [],
+      updated_at: new Date().toISOString(),
     };
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(brand.id);
@@ -190,7 +191,6 @@ export const supabaseService = {
     if (error) console.error('deleteAssetsByGroup error:', error);
   },
 
-  // Fix: Added missing updateAssetPerformance method used in Workspace.tsx
   async updateAssetPerformance(assetId: string, performance: any): Promise<void> {
     const { error } = await supabase
       .from('assets')

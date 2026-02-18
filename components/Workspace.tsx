@@ -19,7 +19,7 @@ interface WorkspaceProps {
   language: Language;
 }
 
-const Workspace: React.FC<WorkspaceProps> = ({ state, onUpdateAssets, onSendMessage, onRenameFolder, onDeleteFolder, onAssetAction, language }) => {
+const Workspace: React.FC<WorkspaceProps> = ({ state, onUpdateAssets, onSendMessage, onRenameFolder, onDeleteFolder, onAssetAction, onExtendVideo, language }) => {
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
@@ -27,6 +27,8 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onUpdateAssets, onSendMess
   const [newFolderName, setNewFolderName] = useState('');
   const [editingAsset, setEditingAsset] = useState<DesignAsset | null>(null);
   const [previewAsset, setPreviewAsset] = useState<DesignAsset | null>(null);
+  const [extendingAsset, setExtendingAsset] = useState<DesignAsset | null>(null);
+  const [extendPrompt, setExtendPrompt] = useState('');
   
   const [logoConfig, setLogoConfig] = useState<{assetId: string | null, position: LogoOverlayOptions['position']}>({
     assetId: null,
@@ -301,6 +303,16 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onUpdateAssets, onSendMess
                 >
                    ⭐
                 </button>
+                {/* Botão Estender — apenas para assets de vídeo */}
+                {asset.videoUrl && (
+                  <button
+                    onClick={() => { setExtendingAsset(asset); setExtendPrompt(''); }}
+                    title="Estender vídeo"
+                    className="flex-none w-9 py-2.5 bg-neutral-800 hover:bg-purple-600 text-neutral-500 hover:text-white text-xs rounded-xl flex items-center justify-center transition-all"
+                  >
+                    ▶+
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -327,6 +339,42 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onUpdateAssets, onSendMess
           language={language}
           onClose={() => setPreviewAsset(null)}
         />
+      )}
+
+      {/* Modal de extensão de vídeo */}
+      {extendingAsset && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/95 backdrop-blur-md" onClick={() => setExtendingAsset(null)}>
+          <div className="bg-neutral-900 border border-white/10 rounded-[32px] w-full max-w-lg overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-8 border-b border-white/5 flex items-center justify-between">
+              <h3 className="text-lg font-black text-white">Estender Vídeo</h3>
+              <button onClick={() => setExtendingAsset(null)} className="text-neutral-400 hover:text-white">✕</button>
+            </div>
+            <div className="p-8 space-y-6">
+              <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-bold">{extendingAsset.name}</p>
+              <div className="space-y-3">
+                <label className="text-[10px] text-neutral-600 uppercase tracking-widest font-bold block">Como continuar o vídeo?</label>
+                <textarea
+                  value={extendPrompt}
+                  onChange={e => setExtendPrompt(e.target.value)}
+                  placeholder="Ex: Continuar com zoom out revelando o produto em ambiente urbano noturno..."
+                  className="w-full bg-black border border-white/5 rounded-2xl p-4 text-sm text-white h-28 outline-none focus:border-indigo-500/50 transition-all resize-none"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  if (extendPrompt.trim()) {
+                    onExtendVideo(extendingAsset, extendPrompt);
+                    setExtendingAsset(null);
+                  }
+                }}
+                disabled={!extendPrompt.trim()}
+                className="w-full py-4 bg-white text-black text-xs font-black rounded-2xl uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-20"
+              >
+                Gerar Extensão
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
