@@ -27,6 +27,13 @@ A **synapx Agency** é uma plataforma de "Agentic UI" projetada para automatizar
 
 ---
 
+## PRÓXIMOS PASSOS (prioridade)
+1. [🔥 Alta] **Veo Video Extension** — Continuar de: Implementação do loop de geração e tratamento de blob para downloads seguros.
+2. [🟡 Média] **Mockup Factory** — Definição de templates e prompts de ambientação (Indoor/Outdoor).
+3. [🟢 Baixa] **Gemini Live API** — Pesquisar viabilidade técnica de streaming de áudio PCM bidirecional.
+
+---
+
 ## MAPA DE ARQUIVOS
 - `App.tsx`: Orquestrador de estado global, persistência Supabase e fluxo principal de mensagens.
 - `types.ts`: Definições rigorosas de interfaces para marcas, assets e perfis.
@@ -40,10 +47,31 @@ A **synapx Agency** é uma plataforma de "Agentic UI" projetada para automatizar
 ---
 
 ## DECISÕES TÉCNICAS IMPORTANTES
-1. **RefSync (useRef + State):** Utilizamos `useRef` em conjunto com `useState` no `App.tsx` para garantir que processos assíncronos de longa duração (como geração de vídeo de 2 minutos) não sofram com *stale closures* (clausuras obsoletas).
-2. **Protocolo JSON-Brief:** O orquestrador não gera assets diretamente; ele gera um briefing técnico em JSON que é interpretado por um especialista, garantindo maior precisão e aderência ao tom da marca.
-3. **Multi-Instância GenAI:** Instanciamos o cliente `GoogleGenAI` dentro de cada chamada de mídia pesada (Imagen/Veo) para assegurar o uso das chaves de API mais recentes selecionadas pelo usuário via dialog.
-4. **RLS (Row Level Security):** Todas as tabelas do Supabase possuem políticas ativas que garantem que usuários só acessem dados de suas próprias marcas e assets.
+1. **RefSync (useRef + State):** Utilizamos `useRef` em conjunto com `useState` no `App.tsx` para garantir que processos assíncronos de longa duração (como geração de vídeo de 2 minutos) não sofram com *stale closures*.
+2. **Protocolo JSON-Brief:** O orquestrador delega produção através de um schema rígido para garantir que o especialista tenha todo o DNA da marca.
+3. **Multi-Instância GenAI:** Instanciamos o cliente `GoogleGenAI` dentro de cada chamada de mídia pesada (Imagen/Veo) para assegurar o uso das chaves de API selecionadas pelo usuário.
+4. **RLS (Row Level Security):** Políticas ativas no Supabase garantem isolamento total de dados entre usuários.
+
+---
+
+## SCHEMA DO PROTOCOLO JSON-BRIEF
+O orquestrador (Synapx Core) deve obrigatoriamente produzir este schema para delegar aos especialistas:
+
+```json
+{
+  "specialist_type": "estrategico | social | copy | mockup | branding | video | music | web",
+  "objetivo": "Meta clara do asset (ex: Conversão, Awareness)",
+  "brand_variables": { 
+    "primary": "#HEX", 
+    "tone": "Atributos de voz", 
+    "concept": "Big Idea da marca", 
+    "fonts": "Tipografia display/corpo" 
+  },
+  "instrucoes_tecnicas": "Instruções cruas para o especialista (prompts de imagem ou estrutura de texto)",
+  "pergunta_de_refinamento": "Pergunta estratégica para o usuário",
+  "mood": "luxo | tech | minimalista | organico | industrial"
+}
+```
 
 ---
 
@@ -54,6 +82,24 @@ A **synapx Agency** é uma plataforma de "Agentic UI" projetada para automatizar
 ---
 
 ## HISTÓRICO DE IMPLEMENTAÇÕES
-- **24/05/2024 — Brand Identity v2:** Melhoria no `BrandManager` para permitir uploads manuais de logos e moodboards independentes do scan de IA.
-- **22/05/2024 — Supabase Integration:** Migração do estado local para persistência persistente em banco de dados.
-- **20/05/2024 — Multi-Agent Core:** Lançamento da arquitetura de especialistas (Copy, Art, Video).
+
+### 24/05/2024 — Atualização de Documentação e Prioridades
+**O que foi feito:**
+- Atualização do `DOCUMENTATION.md` com o roadmap priorizado.
+- Documentação formal do schema `JSON-Brief`.
+- Registro do mapa de arquivos atualizado (v362).
+
+**Arquivos modificados:**
+- `DOCUMENTATION.md` — Inclusão de prioridades e schemas técnicos.
+
+**Decisões técnicas:**
+- Padronização do schema JSON-Brief para evitar alucinações de campos por parte dos modelos de IA durante a delegação.
+
+**Estado atual:**
+- v362 Estável. Sistema de marcas e orquestração funcional.
+
+**Próximos passos sugeridos:**
+- Iniciar prototipagem da extensão de vídeos (Veo Extension).
+
+---
+*Documentação v362 - Engenharia synapx Agency*
