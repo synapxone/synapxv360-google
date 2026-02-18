@@ -6,7 +6,7 @@ import Workspace from './components/Workspace';
 import LandingPage from './components/LandingPage';
 import Auth from './components/Auth';
 import AdminDashboard from './components/AdminDashboard';
-import { CampaignState, Message, UserProfile, Language, DesignAsset, MockupTemplate, Brand, BrandKit } from './types';
+import { CampaignState, Message, UserProfile, Language, DesignAsset, Brand } from './types';
 import { gemini } from './services/geminiService';
 import { supabase, supabaseService } from './services/supabaseService';
 
@@ -97,12 +97,13 @@ const App: React.FC = () => {
 
   const loadUserData = async (userId: string) => {
     const brands = await supabaseService.getBrands(userId);
+    const assets = await supabaseService.getAssets(userId);
     const { data: project } = await supabase.from('projects').select('*').eq('user_id', userId).maybeSingle();
-    const savedAssets = project?.state_data?.assets || [];
+    
     const savedActiveBrandId = project?.state_data?.activeBrandId;
     const finalActiveBrandId = brands.some(b => b.id === savedActiveBrandId) ? savedActiveBrandId : (brands[0]?.id || null);
     
-    setState({ brands, activeBrandId: finalActiveBrandId, assets: savedAssets, brief: project?.state_data?.brief || null });
+    setState({ brands, activeBrandId: finalActiveBrandId, assets, brief: project?.state_data?.brief || null });
     
     if (project?.message_history) {
       const parsedMessages = project.message_history.map((m: any) => ({
@@ -152,6 +153,22 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateAssets = async (newAssets: DesignAsset[]) => {
+    if (!userProfile) return;
+    
+    const oldAssets = stateRef.current.assets;
+    const changed = newAssets.filter(na => {
+      const old = oldAssets.find(oa => oa.id === na.id);
+      return !old || old.status !== na.status || old.copy !== na.copy;
+    });
+
+    setState(prev => ({ ...prev, assets: newAssets }));
+    
+    for (const asset of changed) {
+      await supabaseService.saveAsset(userProfile.id, asset);
+    }
+  };
+
   const handleSendMessage = useCallback(async (content: string, referenceImage?: string) => {
     if (!userProfile || userProfile.credits_remaining <= 0) return;
     if (useHighEnd) await checkApiKey();
@@ -163,12 +180,14 @@ const App: React.FC = () => {
 
     try {
       const history = updatedMessages.map(m => ({ role: m.role, parts: [{ text: m.content }] }));
+      
+      // AGENTE 1: Diretor de Marketing (Briefing)
       const { text, sources } = await gemini.chat(content, referenceImage || null, history, stateRef.current, language);
       
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: text.replace(/```json-(brand|assets)[\s\S]*?```/g, '').trim(),
+        content: text.replace(/```json-(brand|brief|assets)[\s\S]*?```/g, '').trim(),
         timestamp: new Date(),
         groundingSources: sources
       };
@@ -176,62 +195,89 @@ const App: React.FC = () => {
       const finalMessages = [...updatedMessages, assistantMessage];
       setMessages(finalMessages);
 
+      // 1. Processar Brand Kit se houver
       const brandKitMatch = text.match(/```json-brand\n([\s\S]*?)\n```/);
       if (brandKitMatch) {
         try {
           const rawKit = JSON.parse(brandKitMatch[1]);
           const currentBrand = stateRef.current.brands.find(b => b.id === stateRef.current.activeBrandId);
-          
           const brandToSave: Brand = {
             id: stateRef.current.activeBrandId || Date.now().toString(),
             name: rawKit.name || currentBrand?.name || 'Nova Marca',
             website: currentBrand?.website,
             instagram: currentBrand?.instagram,
             visualReferences: currentBrand?.visualReferences,
-            kit: { 
-              ...currentBrand?.kit, 
-              ...rawKit, 
-              colors: rawKit.colors || currentBrand?.kit?.colors || {}, 
-              tone: Array.isArray(rawKit.tone) ? rawKit.tone : (currentBrand?.kit?.tone || [])
-            }
+            kit: { ...currentBrand?.kit, ...rawKit }
           };
           await handleUpdateBrand(brandToSave);
         } catch (e) { console.error("Kit Update Error", e); }
       }
 
-      const assetsMatch = text.match(/```json-assets\n([\s\S]*?)\n```/);
-      if (assetsMatch) {
-        try { 
-          const rawAssets = JSON.parse(assetsMatch[1]);
-          const incoming = Array.isArray(rawAssets) ? rawAssets : [rawAssets];
-          const activeBrand = stateRef.current.brands.find(b => b.id === stateRef.current.activeBrandId);
-          const brandContext = activeBrand ? `${activeBrand.name} - ${activeBrand.kit?.concept}` : 'Premium';
+      // 2. Processar Brief e Chamar AGENTE 2 (Diretor de Arte) automaticamente
+      const briefMatch = text.match(/```json-brief\n([\s\S]*?)\n```/);
+      let assetsToProcess = [];
 
-          const newAssets: DesignAsset[] = [];
-          let detectedLogoUrl: string | null = null;
+      if (briefMatch) {
+        const artDirectorOutput = await gemini.artDirector(briefMatch[1]);
+        const assetsMatch = artDirectorOutput.match(/```json-assets\n([\s\S]*?)\n```/);
+        if (assetsMatch) {
+          try {
+            const rawAssets = JSON.parse(assetsMatch[1]);
+            assetsToProcess = Array.isArray(rawAssets) ? rawAssets : [rawAssets];
+          } catch (e) { console.error("Art Director JSON Error", e); }
+        }
+      } else {
+        // Fallback caso o Agente 1 retorne assets diretamente (compatibilidade V362)
+        const directAssetsMatch = text.match(/```json-assets\n([\s\S]*?)\n```/);
+        if (directAssetsMatch) {
+          try {
+            const rawAssets = JSON.parse(directAssetsMatch[1]);
+            assetsToProcess = Array.isArray(rawAssets) ? rawAssets : [rawAssets];
+          } catch (e) { console.error("Direct Assets Error", e); }
+        }
+      }
 
-          for (const asset of incoming) {
-             const imageUrl = asset.imageUrl || await gemini.generateImage(asset.prompt, brandContext, useHighEnd);
-             newAssets.push({ ...asset, id: Math.random().toString(36).substr(2, 9), imageUrl });
-             if (asset.type?.toLowerCase().includes('logo')) detectedLogoUrl = imageUrl;
+      // 3. Gerar Imagens a partir dos ativos do Diretor de Arte
+      if (assetsToProcess.length > 0) {
+        const activeBrandId = stateRef.current.activeBrandId;
+        const activeBrand = stateRef.current.brands.find(b => b.id === activeBrandId);
+        const brandVisualContext = activeBrand ? `Brand: ${activeBrand.name}. Concept: ${activeBrand.kit?.concept}. Colors: ${JSON.stringify(activeBrand.kit?.colors || {})}` : 'High-end minimalist design';
+
+        const newAssets: DesignAsset[] = [];
+        for (const asset of assetsToProcess) {
+          const safeName = asset.name || userMessage.content.slice(0, 20) || 'Design Variation';
+          const safePrompt = asset.prompt || userMessage.content;
+          
+          const imageUrl = await gemini.generateImage(safePrompt, brandVisualContext, useHighEnd);
+
+          const assetObj: DesignAsset = { 
+            ...asset, 
+            id: Math.random().toString(36).substr(2, 9), 
+            brand_id: activeBrandId || '',
+            group_id: userMessage.id,
+            group_title: userMessage.content,
+            name: safeName,
+            type: asset.type || 'Design',
+            prompt: safePrompt,
+            dimensions: asset.dimensions || '1080x1080',
+            imageUrl,
+            status: 'pending',
+            copy: asset.copy || assistantMessage.content,
+            description: asset.description || ''
+          };
+
+          const { data: savedAsset } = await supabaseService.saveAsset(userProfile.id, assetObj);
+          if (savedAsset) {
+            newAssets.push({
+              ...assetObj,
+              id: savedAsset.id,
+              created_at: savedAsset.created_at
+            });
           }
+        }
 
-          setState(prev => {
-            let updatedBrands = prev.brands;
-            if (detectedLogoUrl && prev.activeBrandId) {
-              updatedBrands = prev.brands.map(b => {
-                if (b.id === prev.activeBrandId && b.kit) {
-                  const newBrand = { ...b, kit: { ...b.kit, logoUrl: detectedLogoUrl } };
-                  supabaseService.saveBrand(userProfile.id, newBrand); 
-                  return newBrand;
-                }
-                return b;
-              });
-            }
-            return { ...prev, brands: updatedBrands, assets: [...newAssets, ...prev.assets] };
-          });
-          setActiveTab('workspace');
-        } catch (e) { console.error("Asset Error", e); }
+        setState(prev => ({ ...prev, assets: [...newAssets, ...prev.assets] }));
+        setActiveTab('workspace');
       }
 
       persist(stateRef.current, finalMessages);
@@ -259,9 +305,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-black overflow-hidden font-sans text-neutral-300 relative selection:bg-indigo-500/30">
-      {isMobileSidebarOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[45] lg:hidden animate-in fade-in duration-300" onClick={() => setIsMobileSidebarOpen(false)} />
-      )}
+      {isMobileSidebarOpen && <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[45] lg:hidden" onClick={() => setIsMobileSidebarOpen(false)} />}
       <Sidebar state={state} isMobileOpen={isMobileSidebarOpen} onClear={() => {}} onSendMessage={(c) => { handleSendMessage(c); setIsMobileSidebarOpen(false); }} onUpdateBrand={handleUpdateBrand} onDeleteBrand={handleDeleteBrand} onSwitchBrand={(id) => { setState(p => ({...p, activeBrandId: id})); setIsMobileSidebarOpen(false); }} language={language} setLanguage={setLanguage} />
       <main className="flex-1 flex flex-col min-w-0 bg-neutral-950">
         <header className="h-16 border-b border-neutral-900 bg-neutral-900/40 backdrop-blur-2xl flex items-center justify-between px-4 lg:px-8 z-10 shrink-0">
@@ -286,6 +330,8 @@ const App: React.FC = () => {
               state={state} 
               language={language} 
               onUpdateBrand={handleUpdateBrand}
+              onUpdateAssets={handleUpdateAssets}
+              onSendMessage={handleSendMessage}
               onGenerateLogo={() => handleSendMessage("Como Designer Senior, crie agora o logo oficial minimalista para minha marca ativa usando o motor Imagen 4.")} 
             />
           )}

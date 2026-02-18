@@ -11,6 +11,7 @@ const Auth: React.FC<AuthProps> = ({ language }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [isSignUp, setIsSignUp] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string, canRetry?: boolean } | null>(null);
@@ -21,6 +22,7 @@ const Auth: React.FC<AuthProps> = ({ language }) => {
       sub: isForgotPassword ? "Enviaremos um link de recuperação" : "Sua agência de design e marketing 24/7",
       emailLabel: "E-mail Profissional",
       passwordLabel: "Senha de Acesso",
+      rememberMe: "Permanecer logado",
       btn: isForgotPassword ? "ENVIAR LINK" : (isSignUp ? "CRIAR CONTA" : "ENTRAR NO CONSOLE"),
       switch: isSignUp ? "Já tem conta? Fazer Login" : "Não tem conta? Começar agora",
       forgot: "Esqueceu a senha?",
@@ -38,6 +40,7 @@ const Auth: React.FC<AuthProps> = ({ language }) => {
       sub: isForgotPassword ? "We will send a recovery link" : "Your 24/7 design & marketing agency",
       emailLabel: "Professional Email",
       passwordLabel: "Access Password",
+      rememberMe: "Stay logged in",
       btn: isForgotPassword ? "SEND LINK" : (isSignUp ? "CREATE ACCOUNT" : "ENTER CONSOLE"),
       switch: isSignUp ? "Already have an account? Login" : "No account? Start now",
       forgot: "Forgot password?",
@@ -49,24 +52,26 @@ const Auth: React.FC<AuthProps> = ({ language }) => {
       errorGeneric: "An error occurred. Please try again.",
       tryLogin: "Try Direct Login",
       resendEmail: "Didn't receive it? Resend"
+    },
+    es: {
+      title: isForgotPassword ? "Recuperar Contraseña" : (isSignUp ? "Crear cuenta" : "Bienvenido"),
+      sub: isForgotPassword ? "Enviaremos un enlace" : "Tu agencia de diseño y marketing 24/7",
+      emailLabel: "Correo Profesional",
+      passwordLabel: "Contraseña",
+      rememberMe: "Permanecer conectado",
+      btn: isForgotPassword ? "ENVIAR ENLACE" : (isSignUp ? "CREAR CUENTA" : "ENTRAR"),
+      switch: isSignUp ? "¿Ya tienes cuenta? Login" : "¿No tienes cuenta? Empezar",
+      forgot: "¿Olvidaste la contraseña?",
+      back: "Volver",
+      successSignUp: "✨ ¡Cuenta creada! Revisa tu correo.",
+      successLogin: "🚀 Autenticando...",
+      successReset: "📧 Enlace enviado.",
+      errorInvalid: "Credenciales inválidas.",
+      errorGeneric: "Error inesperado.",
+      tryLogin: "Intentar Login",
+      resendEmail: "¿No lo recibiste? Reenviar"
     }
-  }[language === 'es' ? 'en' : language] || {
-    title: "Welcome back",
-    sub: "Your 24/7 agency",
-    emailLabel: "Email",
-    passwordLabel: "Password",
-    btn: "ENTER",
-    switch: "Sign up",
-    forgot: "Forgot?",
-    back: "Back",
-    successSignUp: "Account created!",
-    successLogin: "Authenticating...",
-    successReset: "Link sent.",
-    errorInvalid: "Invalid credentials.",
-    errorGeneric: "Error occurred",
-    tryLogin: "Login Now",
-    resendEmail: "Resend"
-  };
+  }[language];
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,11 +89,14 @@ const Auth: React.FC<AuthProps> = ({ language }) => {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: window.location.origin }
+          options: { 
+            emailRedirectTo: window.location.origin,
+            // Supabase handles persistence via its internal storage config, 
+            // the checkbox is primarily for UX confirmation in this setup.
+          }
         });
         if (error) throw error;
         
-        // Se o Supabase retornou uma sessão imediatamente, o usuário já está logado
         if (data?.session) {
           setStatus({ type: 'success', message: t.successLogin });
         } else {
@@ -186,6 +194,31 @@ const Auth: React.FC<AuthProps> = ({ language }) => {
                   )}
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Remember Me Option */}
+          {!isForgotPassword && (
+            <div className="flex items-center gap-3 px-1 animate-in fade-in slide-in-from-left-2 duration-500">
+              <button 
+                type="button"
+                onClick={() => setRememberMe(!rememberMe)}
+                className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-all ${
+                  rememberMe ? 'bg-indigo-600 border-indigo-500' : 'bg-neutral-900 border-neutral-800'
+                }`}
+              >
+                {rememberMe && (
+                  <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </button>
+              <span 
+                className="text-[11px] font-bold text-neutral-500 uppercase tracking-widest cursor-pointer select-none hover:text-neutral-300 transition-colors"
+                onClick={() => setRememberMe(!rememberMe)}
+              >
+                {t.rememberMe}
+              </span>
             </div>
           )}
 

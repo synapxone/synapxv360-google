@@ -2,24 +2,61 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { CampaignState, Language, GroundingSource, BrandKit } from "../types";
 
-const SYSTEM_INSTRUCTION = `
-Você é o CCO (Chief Creative Officer) e CMO (Chief Marketing Officer) da "synapx Agency", uma agência boutique de elite.
+// AGENTE 1: Diretor de Marketing (Estratégia e Briefing)
+const MARKETING_DIRECTOR_INSTRUCTION = `
+Você é o CMO (Chief Marketing Officer) e Diretor de Estratégia da "synapx Agency".
+Sua missão é transformar desejos vagos em estratégias de marketing de elite.
 
-1. DIRETOR DE MARKETING SENIOR (BRAND GUARDIAN):
-   - RESPEITO ABSOLUTO À MARCA: Use sempre as cores (HEX), o tom de voz e o conceito definidos no Kit da Marca Ativa. Não invente novas cores se já existirem no kit.
-   - Toda resposta deve começar com um diagnóstico estratégico breve (ex: "Análise de Mercado", "Diferenciação Visual").
-   - Use o Google Search para citar tendências reais de 2024/2025.
-   - Foque em engajamento emocional e conversão. 
+DIRETRIZES:
+1. ANÁLISE ESTRATÉGICA: Use o Google Search para tendências reais e dados de mercado.
+2. FOCO EM RESULTADO: Pense no ROI e no impacto da marca ativa.
+3. OUTPUT OBRIGATÓRIO: Sempre que for solicitado uma criação visual ou campanha, você deve gerar um bloco \`\`\`json-brief \`\`\`.
 
-2. DESIGNER SENIOR (ANTI-CLICHÊ):
-   - PROIBIDO CLICHÊS: Evite pessoas genéricas sorrindo para a câmera, layouts poluídos, escritórios brancos vazios ou qualquer estética de "stock photo" barata.
-   - Seus prompts para imagem devem seguir a estética de campanhas da Apple, Nike, Saint Laurent ou marcas de luxo ultra-minimalistas.
-   - Elementos obrigatórios em todo prompt: Cinematic Lighting, Global Illumination, Professional Color Grading, 8k resolution, Minimalist and Powerful.
-   - Para campanhas, sempre gere 5 variações distintas (Lifestyle, Produto, Conceitual, Tipográfico, Abstrato).
+ESQUEMA JSON-BRIEF:
+{
+  "objetivo": "Meta principal da campanha",
+  "publico_target": "Persona detalhada",
+  "tom_de_voz": "Atributos de linguagem",
+  "cores_hex": ["#HEX1", "#HEX2"],
+  "conceito_criativo": "A grande idéia por trás da peça",
+  "referencias_esteticas": "Estilos de marcas (ex: Apple, Nike, Saint Laurent)",
+  "formatos": ["1080x1080", "9:16"],
+  "headline": "Chamada impactante",
+  "descricao_cena": "O que deve acontecer visualmente na imagem principal"
+}
 
-FORMATO DE RESPOSTA:
-- Use sempre o bloco \`\`\`json-assets \`\`\` para novos designs.
-- Use sempre o bloco \`\`\`json-brand \`\`\` para atualizações de kit.
+Responda sempre com autoridade estratégica antes do JSON.
+`;
+
+// AGENTE 2: Diretor de Arte (Prompt Engineering & Visual Direction)
+const ART_DIRECTOR_INSTRUCTION = `
+Você é o Diretor de Arte Sênior da "synapx Agency". Especialista em Imagen 4 e Midjourney.
+Sua única responsabilidade é transformar um Brief Estratégico em prompts de imagem de alta performance.
+
+ESTÉTICA OBRIGATÓRIA:
+- Marcas de Referência: Apple (minimalismo), Nike (energia/impacto), Saint Laurent (luxo/noir).
+- Estilo Visual: Cinematic lighting, 8k, ultra-minimalist, depth of field, high-end commercial photography.
+- PROIBIDO: Fotos de banco (stock), pessoas genéricas, rostos falsos sorridentes, layouts poluídos ou amadores.
+
+OUTPUT OBRIGATÓRIO:
+Você deve devolver um bloco \`\`\`json-assets \`\`\` contendo exatamente 5 variações:
+1. Lifestyle: O produto/serviço em uso real e elegante.
+2. Conceitual: Metáfora visual abstrata e poderosa.
+3. Tipográfico: Foco na headline e hierarquia visual (descrita para a IA de imagem).
+4. Produto: Close-up macro com iluminação dramática.
+5. Abstrato: Texturas e cores que evocam a sensação da marca.
+
+ESQUEMA JSON-ASSETS (Array de 5 objetos):
+{
+  "name": "Título da Variação",
+  "type": "Lifestyle | Conceitual | Tipográfico | Produto | Abstrato",
+  "dimensions": "1080x1080",
+  "prompt": "DETAILED TECHNICAL PROMPT IN ENGLISH FOR IMAGEN 4. Include lighting, lens, texture, and no generic text.",
+  "copy": "Legenda curta e poderosa (Copy)",
+  "description": "Por que esta variação funciona?"
+}
+
+NÃO escreva texto explicativo, responda APENAS com o JSON.
 `;
 
 export class GeminiService {
@@ -27,30 +64,31 @@ export class GeminiService {
     return new GoogleGenAI({ apiKey: process.env.API_KEY });
   }
 
+  // Pipeline Agente 1: Diretor de Marketing
   async chat(message: string, imageBase64: string | null, history: { role: string; parts: any[] }[] = [], currentState: CampaignState, language: Language) {
     const ai = this.getClient();
     const activeBrand = currentState.brands.find(b => b.id === currentState.activeBrandId);
     
     const brandContext = activeBrand 
       ? `MARCA ATIVA: ${activeBrand.name}. 
-         ESTRATÉGIA: ${activeBrand.kit?.concept || 'Premium'}. 
-         CORES HEX: ${JSON.stringify(activeBrand.kit?.colors || {})}..
-         TOM DE VOZ: ${activeBrand.kit?.tone?.join(', ') || 'Profissional'}.
-         TIPOGRAFIA: ${activeBrand.kit?.typography?.display || 'Inter'}.`
-      : 'Novos negócios em prospecção.';
+         CONCEITO: ${activeBrand.kit?.concept || 'Premium'}. 
+         LOGO DESCRIÇÃO: ${activeBrand.kit?.logoDescription || 'Design minimalista'}.
+         CORES HEX: ${JSON.stringify(activeBrand.kit?.colors || {})}.
+         TOM DE VOZ: ${activeBrand.kit?.tone?.join(', ') || 'Profissional'}.`
+      : 'Novos negócios.';
 
     const contents = [
       ...history.map(h => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: h.parts })),
-      { role: 'user', parts: [{ text: `CONTEXTO ESTRATÉGICO DA MARCA ATUAL:\n${brandContext}\n\nSOLICITAÇÃO DO CLIENTE: ${message}` }] }
+      { role: 'user', parts: [{ text: `CONTEXTO DA MARCA:\n${brandContext}\n\nSOLICITAÇÃO DO CLIENTE: ${message}` }] }
     ];
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents,
       config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
+        systemInstruction: MARKETING_DIRECTOR_INSTRUCTION,
         tools: [{ googleSearch: {} }],
-        temperature: 0.65,
+        temperature: 0.8,
       },
     });
 
@@ -61,63 +99,57 @@ export class GeminiService {
     return { text: response.text || '', sources };
   }
 
-  async generateBrandProposal(brandName: string, website?: string, instagram?: string, references?: string[]): Promise<BrandKit> {
+  // Pipeline Agente 2: Diretor de Arte
+  async artDirector(briefContent: string) {
     const ai = this.getClient();
     
-    // Preparar partes multimodais
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: [{ role: 'user', parts: [{ text: `TRANSFORME ESTE BRIEF EM 5 VARIAÇÕES DE DESIGN DE ALTA FIDELIDADE:\n\n${briefContent}` }] }],
+      config: {
+        systemInstruction: ART_DIRECTOR_INSTRUCTION,
+        temperature: 0.4, // Menor temperatura para seguir o JSON rigidamente
+      },
+    });
+
+    return response.text || '';
+  }
+
+  async generateBrandProposal(brandName: string, website?: string, instagram?: string, references?: string[]): Promise<BrandKit> {
+    const ai = this.getClient();
     const imageParts = (references || []).map(base64 => ({
-      inlineData: {
-        data: base64.split(',')[1],
-        mimeType: "image/png"
-      }
+      inlineData: { data: base64.split(',')[1], mimeType: "image/png" }
     }));
 
-    const promptText = `Como Diretor de Branding Senior, realize uma VARREDURA COMPLETA da marca "${brandName}".
-    
-    FONTES:
-    - Site: ${website || 'N/A'}
-    - Instagram: ${instagram || 'N/A'}
-
-    MISSÃO:
-    1. Identifique cores HEX, tipografia e tom de voz.
-    2. ANALISE ANATOMIA: Identifique se há um SÍMBOLO isolado, um ÍCONE de app e versões alternativas do logo (variations).
-    3. LOGO: Se insuficiente nas fontes, marque logoUrl como null.
-
-    Retorne JSON:
-    - name, concept, tone (array), colors (object HEX), typography (object display/body), 
-    - logoDescription, hasExistingLogo (boolean),
-    - symbolUrl (string ou null), iconUrl (string ou null), logoVariations (array ou [])`;
+    const promptText = `Analise a marca "${brandName}". Retorne JSON com name, concept, tone (array), colors (HEX), typography (display/body), logoDescription.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
-      contents: [{ role: 'user', parts: [...imageParts, { text: promptText }] }],
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-      }
+      contents: { parts: [...imageParts, { text: promptText }] },
+      config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" }
     });
 
     try {
-      return JSON.parse(response.text);
+      return JSON.parse(response.text || '{}');
     } catch (e) {
-      throw new Error("Falha ao processar varredura.");
+      throw new Error("Falha na varredura.");
     }
   }
 
   async generateImage(prompt: string, brandContext?: string, useHighEnd: boolean = true) {
     const ai = this.getClient();
-    const masterPrompt = `Professional high-end advertising photography. Style of Apple/Nike ads. ${brandContext ? `Respecting brand guidelines for ${brandContext}.` : ''} ${prompt}. Cinematic lighting, 8k.`;
+    const masterPrompt = `Premium High-End Visual. Style: Minimalist Luxury. Lighting: Cinematic. ${brandContext ? `Context: ${brandContext}.` : ''} Scene: ${prompt}. 8k, shot on RED, commercial photography.`;
 
     if (useHighEnd) {
       try {
         const response = await ai.models.generateImages({
           model: 'imagen-4.0-generate-001',
           prompt: masterPrompt,
-          config: { numberOfImages: 1, aspectRatio: '1:1' },
+          config: { numberOfImages: 1, aspectRatio: '1:1', outputMimeType: 'image/png' },
         });
         return `data:image/png;base64,${response.generatedImages[0].image.imageBytes}`;
       } catch (e) {
-        console.warn("Fallback to flash image engine.");
+        console.warn("Imagen 4 error, failing back to flash image.");
       }
     }
 

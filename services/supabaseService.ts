@@ -1,6 +1,6 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
-import { UserProfile, Plan, CampaignState, Brand } from '../types';
+import { UserProfile, Plan, CampaignState, Brand, DesignAsset } from '../types';
 
 const supabaseUrl = 'https://xdvesloxzummajzeszjk.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhkdmVzbG94enVtbWFqemVzemprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNjk2NDcsImV4cCI6MjA4Njk0NTY0N30.DU8kgeRc2S4y71pYwPOXsZQN-L8FoKS6Th-TiVN_K3w';
@@ -31,6 +31,56 @@ export const supabaseService = {
     }));
   },
 
+  async getAssets(userId: string): Promise<DesignAsset[]> {
+    const { data, error } = await supabase.from('assets').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+    if (error) return [];
+    return (data || []).map(a => ({
+      id: a.id,
+      brand_id: a.brand_id,
+      group_id: a.group_id,
+      group_title: a.group_title,
+      name: a.name,
+      type: a.type,
+      dimensions: a.dimensions,
+      imageUrl: a.image_url,
+      prompt: a.prompt,
+      copy: a.copy,
+      status: a.status,
+      isMockup: a.is_mockup,
+      description: '',
+      created_at: a.created_at
+    }));
+  },
+
+  async saveAsset(userId: string, asset: DesignAsset) {
+    const payload = {
+      user_id: userId,
+      brand_id: asset.brand_id,
+      group_id: asset.group_id,
+      group_title: asset.group_title,
+      name: asset.name,
+      type: asset.type,
+      dimensions: asset.dimensions,
+      image_url: asset.imageUrl,
+      prompt: asset.prompt,
+      copy: asset.copy,
+      status: asset.status,
+      is_mockup: asset.isMockup
+    };
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(asset.id);
+    
+    if (isUuid) {
+      return await supabase.from('assets').update(payload).eq('id', asset.id).select().single();
+    } else {
+      return await supabase.from('assets').insert(payload).select().single();
+    }
+  },
+
+  async deleteAsset(assetId: string) {
+    return await supabase.from('assets').delete().eq('id', assetId);
+  },
+
   async saveBrand(userId: string, brand: Brand) {
     const payload = {
       user_id: userId,
@@ -59,7 +109,8 @@ export const supabaseService = {
   },
 
   async saveProjectState(userId: string, state: CampaignState, messages: any[]) {
-    const cleanState = { assets: state.assets, activeBrandId: state.activeBrandId, brief: state.brief };
+    // Assets are now managed separately for better scale
+    const cleanState = { activeBrandId: state.activeBrandId, brief: state.brief };
     return await supabase.from('projects').upsert({ 
       user_id: userId, 
       state_data: cleanState, 
