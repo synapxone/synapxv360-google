@@ -7,7 +7,7 @@ interface WorkspaceProps {
   onUpdateBrand: (brand: Brand) => Promise<void>;
   onDeleteBrand: (id: string) => void;
   onUpdateAssets: (assets: DesignAsset[]) => void;
-  onSendMessage: (content: string) => void;
+  onSendMessage: (groupId: string, title: string) => void;
   onRenameFolder: (groupId: string, newTitle: string) => Promise<void>;
   onAssetAction: (id: string, status: 'approved' | 'rejected') => Promise<void>;
   onExtendVideo: (asset: DesignAsset, prompt: string) => void;
@@ -40,12 +40,10 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onSendMessage, onRenameFol
 
     let result = Object.values(groups);
 
-    // Filter by Search
     if (searchQuery) {
       result = result.filter(f => f.title.toLowerCase().includes(searchQuery.toLowerCase()));
     }
 
-    // Filter by Date
     const now = Date.now();
     if (dateFilter !== 'all') {
       result = result.filter(f => {
@@ -77,7 +75,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onSendMessage, onRenameFol
     return (
       <div className="h-full flex flex-col bg-black">
         <header className="p-8 border-b border-neutral-900 space-y-6">
-          <h2 className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em]">Gestão de Projetos</h2>
+          <h2 className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em]">Biblioteca de Ativos</h2>
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1 relative">
               <input 
@@ -152,18 +150,18 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onSendMessage, onRenameFol
               </div>
             ) : (
               <div className="flex items-center gap-3">
-                <h3 className="text-lg font-black text-white uppercase italic tracking-tighter">Projetos: {currentFolder?.title}</h3>
+                <h3 className="text-lg font-black text-white uppercase italic tracking-tighter">{currentFolder?.title}</h3>
                 <button onClick={() => setIsRenaming(true)} className="text-neutral-600 hover:text-indigo-500 transition-colors">✏️</button>
               </div>
             )}
-            <p className="text-[10px] font-black text-neutral-600 uppercase tracking-widest mt-1">Gerencie e aprove suas criações nesta pasta.</p>
+            <p className="text-[10px] font-black text-neutral-600 uppercase tracking-widest mt-1">Biblioteca ativa do projeto.</p>
           </div>
         </div>
         <button 
-          onClick={() => onSendMessage(`Vamos retomar o projeto "${currentFolder?.title}". O que podemos melhorar?`)}
-          className="px-6 py-3 bg-white text-black text-[10px] font-black rounded-2xl uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all shadow-xl"
+          onClick={() => onSendMessage(currentFolder!.id, currentFolder!.title)}
+          className="px-6 py-3 bg-white text-black text-[10px] font-black rounded-2xl uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all shadow-xl"
         >
-          Retomar Conversa no Chat
+          Retomar Conversa
         </button>
       </header>
       
@@ -175,32 +173,11 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onSendMessage, onRenameFol
                {asset.videoUrl && <video src={asset.videoUrl} className="w-full h-full object-cover" controls />}
                {asset.audioUrl && <div className="h-full flex items-center justify-center bg-indigo-900/10 text-4xl">🎵</div>}
                
-               {/* Action Overlay */}
                <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center gap-3 p-6 backdrop-blur-sm">
-                  <button 
-                    onClick={() => onAssetAction(asset.id, 'approved')}
-                    className="w-full py-3 bg-green-600 hover:bg-green-500 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all"
-                  >
-                    Aprovar
-                  </button>
-                  <button 
-                    onClick={() => handleDownload(asset.imageUrl || asset.videoUrl || '', asset.name)}
-                    className="w-full py-3 bg-white text-black hover:bg-indigo-600 hover:text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all"
-                  >
-                    Baixar
-                  </button>
-                  <button 
-                    onClick={() => onSendMessage(`Quero editar o ativo "${asset.name}" da pasta "${currentFolder?.title}". [PROMPT]: `)}
-                    className="w-full py-3 bg-neutral-800 hover:bg-indigo-600 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all"
-                  >
-                    Editar
-                  </button>
-                  <button 
-                    onClick={() => onAssetAction(asset.id, 'rejected')}
-                    className="w-full py-3 bg-red-600 hover:bg-red-500 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all"
-                  >
-                    Deletar
-                  </button>
+                  <button onClick={() => onAssetAction(asset.id, 'approved')} className="w-full py-3 bg-green-600 hover:bg-green-500 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Aprovar</button>
+                  <button onClick={() => handleDownload(asset.imageUrl || asset.videoUrl || '', asset.name)} className="w-full py-3 bg-white text-black hover:bg-indigo-600 hover:text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Baixar</button>
+                  <button onClick={() => onSendMessage(asset.group_id, `Quero editar o ativo "${asset.name}"`)} className="w-full py-3 bg-neutral-800 hover:bg-indigo-600 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Solicitar Edição</button>
+                  <button onClick={() => onAssetAction(asset.id, 'rejected')} className="w-full py-3 bg-red-600 hover:bg-red-500 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Excluir</button>
                </div>
 
                <div className="absolute top-4 right-4 z-10">
@@ -211,7 +188,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onSendMessage, onRenameFol
             </div>
             <div className="p-6">
               <p className="text-[11px] font-black text-white uppercase truncate">{asset.name}</p>
-              <p className="text-[9px] text-neutral-500 font-mono mt-1 uppercase tracking-widest">{asset.type} • {asset.dimensions}</p>
+              <p className="text-[9px] text-neutral-500 font-mono mt-1 uppercase tracking-widest">{asset.type}</p>
             </div>
           </div>
         ))}

@@ -22,7 +22,10 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'chat' | 'workspace'>('chat');
   const [assetQuantity, setAssetQuantity] = useState(1);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
 
+  // Contador para interromper processos antigos se uma nova mensagem for enviada
+  const requestCounter = useRef(0);
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
 
@@ -41,11 +44,30 @@ const App: React.FC = () => {
     });
   }, []);
 
-  const handleSendMessage = useCallback(async (content: string, image?: string) => {
+  const handleSendMessage = useCallback(async (content: string, image?: string, targetGroupId?: string) => {
     if (!userProfile) return;
-    setIsMobileMenuOpen(false); 
     
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', content, timestamp: new Date(), referenceImage: image };
+    // Incrementa o contador para invalidar processos assíncronos em andamento
+    const currentRequestId = ++requestCounter.current;
+    
+    setIsMobileMenuOpen(false);
+    
+    // Define o ID do grupo (pasta): 
+    // 1. Se veio do Workspace (targetGroupId), usa ele.
+    // 2. Se já estamos em uma conversa ativa (activeGroupId), mantém.
+    // 3. Caso contrário, cria um novo (nova pasta).
+    const groupId = targetGroupId || activeGroupId || Date.now().toString();
+    setActiveGroupId(groupId);
+
+    const userMsg: Message = { 
+      id: Date.now().toString(), 
+      role: 'user', 
+      content, 
+      timestamp: new Date(), 
+      referenceImage: image,
+      metadata: { groupId } 
+    };
+    
     setMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
     setLoadingStage('thinking');
@@ -53,6 +75,9 @@ const App: React.FC = () => {
     try {
       const { text, sources } = await gemini.chat(content, image || null, messages, state, language);
       
+      // Se uma nova mensagem foi enviada enquanto o Gemini pensava, interrompe aqui.
+      if (currentRequestId !== requestCounter.current) return;
+
       let ideas: IdeaOption[] | undefined;
       const ideaMatch = text.match(/```json-ideas\n([\s\S]*?)\n```/);
       if (ideaMatch) ideas = JSON.parse(ideaMatch[1]);
@@ -70,7 +95,9 @@ const App: React.FC = () => {
 
       const briefMatch = text.match(/```json-brief\n([\s\S]*?)\n```/);
       if (briefMatch) {
+        if (currentRequestId !== requestCounter.current) return;
         setLoadingStage('briefing');
+        
         const brief = JSON.parse(briefMatch[1]);
         const activeBrand = state.brands.find(b => b.id === state.activeBrandId);
         const brandCtx = activeBrand ? { colors: activeBrand.kit?.colors, tone: activeBrand.kit?.tone } : {};
@@ -79,14 +106,23 @@ const App: React.FC = () => {
         const assetsMatch = specialistRaw.match(/```json-assets\n([\s\S]*?)\n```/);
         
         if (assetsMatch) {
+          if (currentRequestId !== requestCounter.current) return;
           setLoadingStage('generating');
+          
           const rawAssets = JSON.parse(assetsMatch[1]);
           const baseAssets = Array.isArray(rawAssets) ? rawAssets : [rawAssets];
           const newAssets: DesignAsset[] = [];
           const assetIds: string[] = [];
 
+          // Mantém o título original da pasta se ela já existir
+          const existingAssetInGroup = state.assets.find(a => a.group_id === groupId);
+          const folderTitle = existingAssetInGroup?.group_title || content;
+
           for (let i = 0; i < assetQuantity; i++) {
             for (const base of baseAssets) {
+              // Verifica a cada iteração de geração se o processo deve continuar
+              if (currentRequestId !== requestCounter.current) return;
+              
               let url: any;
               if (brief.specialist_type === 'video') url = await gemini.generateVideo(base.prompt);
               else if (brief.specialist_type === 'music') url = await gemini.generateAudio(base.copy || base.prompt);
@@ -95,8 +131,8 @@ const App: React.FC = () => {
               const asset: DesignAsset = {
                 id: Math.random().toString(36).substr(2, 9),
                 brand_id: state.activeBrandId || '',
-                group_id: userMsg.id,
-                group_title: content,
+                group_id: groupId,
+                group_title: folderTitle,
                 name: `${base.name} ${i + 1}`,
                 type: base.type || brief.specialist_type,
                 dimensions: base.dimensions || '1080x1080',
@@ -120,12 +156,20 @@ const App: React.FC = () => {
           setMessages(prev => prev.map(m => m.id === assistantMsg.id ? { ...m, attachedAssetIds: assetIds } : m));
         }
       }
-    } catch (e) { console.error(e); } finally { setIsLoading(false); setLoadingStage('idle'); }
-  }, [userProfile, state, messages, language, assetQuantity]);
+    } catch (e) { 
+      console.error(e); 
+    } finally { 
+      // Só limpa o loading se esta for a última requisição enviada
+      if (currentRequestId === requestCounter.current) {
+        setIsLoading(false); 
+        setLoadingStage('idle'); 
+      }
+    }
+  }, [userProfile, state, messages, language, assetQuantity, activeGroupId]);
 
   const handleAssetStatus = async (id: string, status: 'approved' | 'rejected') => {
     if (status === 'rejected') {
-      if (!window.confirm("Esta ação é irreversível. Deseja deletar esta arte permanentemente do banco de dados?")) return;
+      if (!window.confirm("Deseja deletar permanentemente este ativo?")) return;
       await supabaseService.deleteAsset(id);
       setState(prev => ({ ...prev, assets: prev.assets.filter(a => a.id !== id) }));
       setMessages(prev => prev.map(m => ({ ...m, attachedAssetIds: m.attachedAssetIds?.filter(aid => aid !== id) })));
@@ -147,9 +191,10 @@ const App: React.FC = () => {
     }));
   };
 
-  const handleRetakeConversation = (title: string) => {
+  const handleRetakeConversation = (groupId: string, title: string) => {
     setActiveTab('chat');
-    handleSendMessage(`Vamos retomar o projeto: "${title}". O que podemos melhorar ou qual o próximo passo?`);
+    setActiveGroupId(groupId); // Garante que novas mensagens caiam na mesma pasta
+    handleSendMessage(`Vamos retomar o projeto na pasta "${title}". Qual o próximo passo?`, undefined, groupId);
   };
 
   if (viewMode === 'landing') return <LandingPage onStart={() => setViewMode('auth')} language={language} setLanguage={setLanguage} />;
@@ -168,7 +213,10 @@ const App: React.FC = () => {
           await supabaseService.deleteBrand(id);
           setState(prev => ({ ...prev, brands: prev.brands.filter(b => b.id !== id), activeBrandId: null }));
         }}
-        onSwitchBrand={(id) => setState(p => ({ ...p, activeBrandId: id }))}
+        onSwitchBrand={(id) => {
+          setState(p => ({ ...p, activeBrandId: id }));
+          setActiveGroupId(null); // Reseta a pasta ativa ao trocar de marca para evitar confusão
+        }}
         language={language} 
         setLanguage={setLanguage} 
         isMobileOpen={isMobileMenuOpen} 
@@ -178,23 +226,20 @@ const App: React.FC = () => {
       <main className="flex-1 flex flex-col bg-neutral-950 min-w-0">
         <header className="h-16 border-b border-neutral-900 flex items-center justify-between px-6 bg-neutral-900/40 backdrop-blur-xl shrink-0 z-30">
           <div className="flex items-center gap-4">
-            <button 
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="lg:hidden p-2 bg-neutral-800 rounded-xl text-white"
-            >
+            <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="lg:hidden p-2 bg-neutral-800 rounded-xl text-white">
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
               </svg>
             </button>
             <div className="flex bg-black/40 p-1 rounded-2xl border border-white/5">
               <button onClick={() => setActiveTab('chat')} className={`px-4 sm:px-6 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'chat' ? 'bg-indigo-600 text-white shadow-lg' : 'text-neutral-500'}`}>Chat</button>
-              <button onClick={() => setActiveTab('workspace')} className={`px-4 sm:px-6 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'workspace' ? 'bg-indigo-600 text-white shadow-lg' : 'text-neutral-500'}`}>Pastas</button>
+              <button onClick={() => setActiveTab('workspace')} className={`px-4 sm:px-6 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'workspace' ? 'bg-indigo-600 text-white shadow-lg' : 'text-neutral-500'}`}>Biblioteca</button>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-neutral-900 border border-white/5 rounded-xl">
-               <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Ativos p/ Prompt:</span>
+               <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Lote:</span>
                <select value={assetQuantity} onChange={e => setAssetQuantity(Number(e.target.value))} className="bg-transparent text-[10px] font-black text-indigo-400 outline-none cursor-pointer">
                  {[1, 2, 3, 4].map(n => <option key={n} value={n} className="bg-neutral-900">{n}</option>)}
                </select>
@@ -233,10 +278,7 @@ const App: React.FC = () => {
       </main>
       
       {isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileMenuOpen(false)} />
       )}
     </div>
   );
