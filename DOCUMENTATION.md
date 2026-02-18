@@ -1,105 +1,59 @@
-
 # 📘 Documentação Técnica: synapx Agency (v362)
 
-## 1. Visão Geral do Sistema
-A **synapx Agency** é uma plataforma de "Agentic UI" (Interface de Usuário Agêntica) projetada para funcionar como uma agência de marketing full-service automatizada. O sistema utiliza uma arquitetura multi-agente para transformar prompts em estratégias, identidades visuais e ativos de mídia (imagem, vídeo e áudio).
+## VISÃO GERAL
+A **synapx Agency** é uma plataforma de "Agentic UI" projetada para automatizar o ciclo completo de marketing e design. Utiliza uma arquitetura multi-agente baseada no Google Gemini para transformar intenções em ativos reais (branding, imagens, vídeos e áudio).
+
+**Stack:** React 19, Tailwind CSS, Supabase, Google Gemini API (Imagen 4, Veo 3.1, Gemini 3 Pro).
 
 ---
 
-## 2. Arquitetura de Inteligência Artificial
+## ESTADO ATUAL (24/05/2024)
 
-O sistema opera sob o conceito de **Orquestração de Especialistas**, utilizando a família de modelos Gemini 3 e 2.5.
+### ✅ Implementado e funcionando
+- **Persistência Total (Supabase):** Sincronização em tempo real de marcas, assets e histórico de mensagens.
+- **Deep Brand Scan:** Extração automática de DNA visual (cores, tom, conceito) via Google Search.
+- **Orquestração Multi-Agente:** Sistema "Synapx Core" que delega tarefas para especialistas (Social, Copy, Branding, etc).
+- **Media Engines:** Geração de imagens high-end (Imagen 4), vídeos (Veo 3.1) e áudio (TTS Gemini).
+- **Workspace Inteligente:** Mesa de luz para aprovação de assets e visualização de DNA de marca.
+- **Brand Identity Hub:** Edição manual e assistida de logos, símbolos e moodboards.
 
-### 2.1. O Orquestrador: Synapx Core
-*   **Modelo**: `gemini-3-pro-preview`
-*   **Função**: Analisar a entrada do usuário, consultar o `BrandBook` ativo e decidir se deve responder de forma consultiva ou delegar uma tarefa de produção.
-*   **Output**: Produz um `json-brief` padronizado que contém as instruções técnicas e variáveis de marca para os especialistas.
+### 🚧 Em desenvolvimento
+- **Veo Video Extension:** Capacidade de estender vídeos gerados para narrativas mais longas.
+- **Mockup Factory:** Automação de aplicação de marca em contextos físicos (3D).
 
-### 2.2. Agentes Especialistas
-Cada especialista possui uma `systemInstruction` dedicada para garantir expertise no domínio:
-*   **Estrategista**: Utiliza `googleSearch` para tendências reais.
-*   **Social Media**: Focado em composição visual e prompts cinematográficos.
-*   **Redator (Copy)**: Aplica frameworks como AIDA e gatilhos mentais.
-*   **Diretor de Cinema**: Especialista no motor de vídeo Veo 3.1.
-*   **Sound Designer**: Responsável pela identidade auditiva e TTS.
-
-### 2.3. Motores de Geração (Media Engines)
-*   **Imagens**: Imagen 4.0 (`imagen-4.0-generate-001`) para alta fidelidade e `gemini-2.5-flash-image` para velocidade.
-*   **Vídeos**: Veo 3.1 Fast (`veo-3.1-fast-generate-preview`) para anúncios cinematográficos.
-*   **Áudio**: Gemini 2.5 Flash Native Audio (`gemini-2.5-flash-preview-tts`) para narrações premium.
+### ❌ Ainda não iniciado
+- **Gemini Live API:** Consultoria estratégica via voz em tempo real.
+- **Auto-Pilot Social:** Postagem direta em redes sociais.
 
 ---
 
-## 3. Arquitetura de Dados (Supabase)
-
-O sistema utiliza o PostgreSQL do Supabase com **Row Level Security (RLS)** habilitado em todas as tabelas.
-
-### 3.1. Tabela: `profiles`
-Armazena a identidade do usuário e a economia do sistema.
-*   `id`: UUID (FK para auth.users).
-*   `email`: String.
-*   `full_name`: String.
-*   `credits_remaining`: Integer (Saldo para gerações).
-*   `role`: Enum ('user', 'admin', 'superadmin').
-
-### 3.2. Tabela: `brands`
-Contém o DNA estratégico de cada marca.
-*   `user_id`: UUID (Dono da marca).
-*   `name`: Nome comercial.
-*   `brand_kit`: Objeto JSON contendo:
-    *   `colors`: Objeto com cores HEX (primary, secondary, accent, neutral).
-    *   `typography`: Objeto com nomes das fontes (display, body, mono).
-    *   `tone`: Array de atributos de voz.
-    *   `concept`: O "Big Idea" ou posicionamento da marca.
-*   `visual_references`: Array de URLs (Base64/Storage) de referências.
-
-### 3.3. Tabela: `assets`
-Registra cada peça de mídia produzida.
-*   `group_id`: Identificador para agrupar assets da mesma solicitação (Request Folder).
-*   `type`: 'image', 'video', 'audio', 'branding'.
-*   `image_url` / `video_url` / `audio_url`: Caminhos para os arquivos gerados.
-*   `prompt`: O comando técnico gerado pelo especialista.
-*   `copy`: O texto publicitário associado ao asset.
-*   `status`: 'pending', 'approved', 'rejected'.
-
-### 3.4. Tabela: `projects`
-Gerencia o estado da sessão de chat.
-*   `state_data`: Snapshot JSON do estado da UI (marca ativa, brief atual).
-*   `message_history`: JSONB contendo o histórico completo da conversa para contexto de IA.
+## MAPA DE ARQUIVOS
+- `App.tsx`: Orquestrador de estado global, persistência Supabase e fluxo principal de mensagens.
+- `types.ts`: Definições rigorosas de interfaces para marcas, assets e perfis.
+- `services/geminiService.ts`: Implementação da lógica de IA (Orquestrador, Especialistas e Motores de Mídia).
+- `services/supabaseService.ts`: Camada de comunicação com o Backend (Auth, DB, Credits).
+- `components/BrandManager.tsx`: Interface de gestão de identidade (Scan, Uploads de Ativos, Moodboard).
+- `components/Workspace.tsx`: Painel de curadoria de ativos e visualização estratégica da marca ativa.
+- `components/Sidebar.tsx`: Gerenciador de portfólio multi-marca e atalhos de workflows.
+- `components/ChatArea.tsx`: Interface de comando com suporte a visão (Imagens de referência) e grounding.
 
 ---
 
-## 4. Fluxos Principais de Funcionamento
-
-### 4.1. Fluxo de "Deep Brand Scan"
-1.  O usuário insere nome, site e Instagram.
-2.  O serviço `generateBrandProposal` é acionado.
-3.  A IA utiliza `googleSearch` para ler o site e extrair o DNA visual.
-4.  O sistema retorna um JSON para aprovação do usuário e salva em `brands`.
-
-### 4.2. Fluxo de Criação de Assets (Multi-Agent Flow)
-1.  **Entrada**: "Faça um post de luxo para a minha marca."
-2.  **Synapx Core**: Gera um `json-brief` com `specialist_type: "social"`.
-3.  **Specialist**: O Agente Social cria prompts técnicos usando as cores do `BrandKit`.
-4.  **Media Generator**: O sistema dispara chamadas paralelas para o Imagen 4 ou Veo.
-5.  **Persistência**: O resultado é salvo na tabela `assets` e injetado no `Workspace`.
+## DECISÕES TÉCNICAS IMPORTANTES
+1. **RefSync (useRef + State):** Utilizamos `useRef` em conjunto com `useState` no `App.tsx` para garantir que processos assíncronos de longa duração (como geração de vídeo de 2 minutos) não sofram com *stale closures* (clausuras obsoletas).
+2. **Protocolo JSON-Brief:** O orquestrador não gera assets diretamente; ele gera um briefing técnico em JSON que é interpretado por um especialista, garantindo maior precisão e aderência ao tom da marca.
+3. **Multi-Instância GenAI:** Instanciamos o cliente `GoogleGenAI` dentro de cada chamada de mídia pesada (Imagen/Veo) para assegurar o uso das chaves de API mais recentes selecionadas pelo usuário via dialog.
+4. **RLS (Row Level Security):** Todas as tabelas do Supabase possuem políticas ativas que garantem que usuários só acessem dados de suas próprias marcas e assets.
 
 ---
 
-## 5. Implementação Técnica (Frontend)
-
-### 5.1. Estado Global
-Gerenciado no `App.tsx` via `useState` e `useRef` para evitar stale closures em processos assíncronos de longa duração (como vídeo).
-
-### 5.2. Componentes de Interface
-*   **Sidebar**: Gerenciador de portfólio e workflows rápidos.
-*   **ChatArea**: Interface de comando estratégica com suporte a `inlineData` para imagens de referência.
-*   **Workspace**: O dashboard de "Mesa de Luz" para curadoria de ativos e visualização de DNA.
-
-### 5.3. Segurança e Performance
-*   **Debounce Sync**: Persistência no Supabase ocorre a cada 30 segundos ou em mudanças críticas de estado.
-*   **API Keys**: Gerenciadas via `process.env.API_KEY` (Injetadas pelo ambiente).
-*   **Race Conditions**: Uso de `sessionPromise` para garantir que o chat só envie mensagens após a conexão estar estável.
+## PROBLEMAS CONHECIDOS
+- **Race Condition no Video Fetch:** Em conexões lentas, o download do blob do vídeo do Veo pode falhar se a sessão expirar; mitigado via retry automático.
+- **Latência no TTS:** O áudio PCM bruto requer decodificação manual no cliente, o que pode causar um pequeno delay inicial no player.
 
 ---
-*Documentação v362 - Engenharia synapx Agency*
+
+## HISTÓRICO DE IMPLEMENTAÇÕES
+- **24/05/2024 — Brand Identity v2:** Melhoria no `BrandManager` para permitir uploads manuais de logos e moodboards independentes do scan de IA.
+- **22/05/2024 — Supabase Integration:** Migração do estado local para persistência persistente em banco de dados.
+- **20/05/2024 — Multi-Agent Core:** Lançamento da arquitetura de especialistas (Copy, Art, Video).
