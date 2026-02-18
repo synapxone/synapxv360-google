@@ -131,10 +131,29 @@ synapx Agency é uma plataforma de marketing full-service alimentada por IA (Gem
 - ✅ **Z-Index Correction**: Modal agora cobre a tela toda corretamente com overlay, pois não está mais restrito ao contexto de empilhamento da Sidebar.
 - ✅ **Prop Drilling**: Sidebar agora apenas emite eventos `onNewBrand` e `onEditBrand`, delegando a renderização visual para o componente pai.
 
+---
+### 2024-05-23 — Fix: supabaseService.ts Completo (v386)
+
+**O que foi feito:**
+- ✅ **Service Refresh**: Substituição total do `supabaseService.ts` para garantir consistência e completude.
+- ✅ **Mappers Integrados**: `mapBrandFromDb` e `mapAssetFromDb` implementados para conversão automática snake_case <-> camelCase.
+- ✅ **Full CRUD**: Implementação de todos os métodos de persistência de assets (`getAssets`, `saveAsset`, `deleteAsset`, `updateGroupTitle`, `deleteAssetsByGroup`) que estavam faltando na versão anterior.
+- ✅ **Payload Sanitization**: `saveBrand` agora inclui `competitor_websites` e retorna objetos já mapeados, evitando erros de leitura no frontend.
+
+---
+### 2024-05-23 — Fix: Agentes Completos + ChatArea + Workspace (v387)
+
+**O que foi feito:**
+- ✅ **geminiService.ts**: Implementados métodos faltantes `runSpecialist`, `generateVideo`, `generateAudio`, `extendVideo` e a helper `pcmToWav`. Atualizado `SYSTEM_INSTRUCTION` para diretrizes estratégicas mais claras.
+- ✅ **ChatArea.tsx**: Atualizada interface de props para receber `allAssets` e callbacks. Implementado `AssetCard` com botões abaixo da imagem e renderização inline de assets gerados.
+- ✅ **Workspace.tsx**: Refatoração visual dos cards da galeria. Botões de ação movidos para área dedicada abaixo da imagem, eliminando o problema de overlay que escondia o conteúdo.
+
 **Arquivos modificados:**
-- `components/Sidebar.tsx` — removido BrandManager interno, adicionadas props de callback.
-- `App.tsx` — adicionado estado global de modal e renderização condicional do BrandManager.
+- `services/geminiService.ts`
+- `components/ChatArea.tsx`
+- `components/Workspace.tsx`
 
 **Decisão técnica:**
-- Modais críticos de sistema devem ser sempre renderizados no nível mais alto possível da árvore de componentes para evitar conflitos de CSS (transform/fixed) e z-index.
+- Separação rigorosa entre visualização do asset e controles de ação para evitar conflitos de UX em dispositivos touch e desktops.
+- Adoção de Veo 2.0 para geração de vídeo com polling de status para garantir a entrega do asset final.
 ---

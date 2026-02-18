@@ -1,23 +1,24 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Message, Language, DesignAsset, Brand } from '../types';
-import { LoadingStage } from '../App';
 import { TEMPLATES } from '../data/templates';
 
 interface ChatAreaProps {
   messages: Message[];
   onSendMessage: (content: string, image?: string, metadata?: any) => void;
   isLoading: boolean;
-  loadingStage: LoadingStage;
+  loadingStage?: string;
   language: Language;
-  allAssets: DesignAsset[];
-  onAssetAction: (id: string, status: 'approved' | 'rejected') => void;
+  allAssets?: DesignAsset[];
+  onAssetAction?: (id: string, action: 'approved' | 'rejected' | 'top_performer') => void;
   activeBrand?: Brand;
 }
 
-const ChatArea: React.FC<ChatAreaProps> = ({ messages, onSendMessage, isLoading, loadingStage, language, allAssets, onAssetAction, activeBrand }) => {
+const ChatArea: React.FC<ChatAreaProps> = ({ 
+  messages, onSendMessage, isLoading, loadingStage, language, 
+  allAssets = [], onAssetAction, activeBrand 
+}) => {
   const [input, setInput] = useState('');
-  const [currentStatusIndex, setCurrentStatusIndex] = useState(0);
   const [showTemplates, setShowTemplates] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -29,67 +30,9 @@ const ChatArea: React.FC<ChatAreaProps> = ({ messages, onSendMessage, isLoading,
     { pt: "Analisar concorrentes", en: "Analyze competitors", icon: "🕵️" }
   ];
 
-  const statusMessages = {
-    pt: {
-      thinking: [
-        "Pesquisando possibilidades...",
-        "Analisando concorrência...",
-        "Consultando o Synapx Core...",
-        "Refinando estratégia criativa...",
-        "Comparando informações..."
-      ],
-      briefing: "Estruturando briefing técnico...",
-      generating: "Produzindo ativos em alta fidelidade...",
-      syncing: "Sincronizando com o Cloud Hub..."
-    },
-    en: {
-      thinking: [
-        "Researching possibilities...",
-        "Analyzing competition...",
-        "Consulting Synapx Core...",
-        "Refining creative strategy...",
-        "Comparing information..."
-      ],
-      briefing: "Structuring technical briefing...",
-      generating: "Generating high-fidelity assets...",
-      syncing: "Syncing with Cloud Hub..."
-    },
-    es: {
-      thinking: [
-        "Investigando posibilidades...",
-        "Analizando competencia...",
-        "Consultando Synapx Core...",
-        "Refinando estrategia creativa...",
-        "Comparando información..."
-      ],
-      briefing: "Estructurando briefing técnico...",
-      generating: "Generando activos de alta fidelidad...",
-      syncing: "Sincronizando con Cloud Hub..."
-    }
-  }[language === 'es' ? 'es' : language === 'en' ? 'en' : 'pt'];
-
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
-
-  useEffect(() => {
-    let interval: number;
-    if (isLoading && loadingStage === 'thinking') {
-      interval = window.setInterval(() => {
-        setCurrentStatusIndex((prev) => (prev + 1) % statusMessages.thinking.length);
-      }, 2500);
-    } else {
-      setCurrentStatusIndex(0);
-    }
-    return () => clearInterval(interval);
-  }, [isLoading, loadingStage, statusMessages.thinking.length]);
-
-  const getDisplayStatus = () => {
-    if (loadingStage === 'thinking') {
-      return statusMessages.thinking[currentStatusIndex];
-    }
-    return statusMessages[loadingStage as keyof typeof statusMessages] || loadingStage;
-  };
+  }, [messages, isLoading, allAssets]);
 
   const handleSelectTemplate = (templateId: string) => {
     const template = TEMPLATES.find(t => t.id === templateId);
@@ -97,24 +40,72 @@ const ChatArea: React.FC<ChatAreaProps> = ({ messages, onSendMessage, isLoading,
     setShowTemplates(false);
   };
 
-  const renderAsset = (asset: DesignAsset) => (
-    <div key={asset.id} className="w-full sm:w-64 bg-black border border-white/5 rounded-3xl overflow-hidden shadow-2xl group animate-in zoom-in duration-300">
-      <div className="aspect-square relative">
-        {asset.videoUrl ? <video src={asset.videoUrl} className="w-full h-full object-cover" controls /> : 
-         asset.audioUrl ? <div className="h-full flex items-center justify-center bg-indigo-600/10 text-4xl">🎵</div> :
-         <img src={asset.imageUrl} className="w-full h-full object-cover" />}
-        
-        <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-3 transition-all p-4 backdrop-blur-sm">
-           <button onClick={() => onAssetAction(asset.id, 'approved')} className="w-full py-2.5 bg-green-500 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg">Aprovar</button>
-           <button onClick={() => onAssetAction(asset.id, 'rejected')} className="w-full py-2.5 bg-red-500 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg">Deletar</button>
+  const AssetCard: React.FC<{ asset: DesignAsset }> = ({ asset }) => {
+    const isTopPerformer = asset.performance?.feedback === 'top_performer';
+    
+    return (
+      <div className="relative group rounded-2xl overflow-hidden border border-white/5 bg-neutral-900 w-48 shrink-0">
+        {/* Imagem */}
+        <div className="aspect-square overflow-hidden bg-neutral-800 relative">
+          {asset.imageUrl ? (
+            <img src={asset.imageUrl} className="w-full h-full object-cover" alt={asset.name} />
+          ) : asset.videoUrl ? (
+            <video src={asset.videoUrl} className="w-full h-full object-cover" muted loop />
+          ) : asset.audioUrl ? (
+             <div className="h-full flex items-center justify-center bg-indigo-600/10 text-4xl">🎵</div>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-neutral-700 text-xs uppercase animate-pulse">Gerando...</div>
+          )}
+          
+          {/* Badge Top Performer */}
+          {isTopPerformer && (
+            <div className="absolute top-2 left-2 px-2 py-1 bg-yellow-500 text-black text-[8px] font-black rounded-full flex items-center gap-1">
+              ⭐ TOP
+            </div>
+          )}
+        </div>
+
+        {/* Info + Botões — ABAIXO da imagem, nunca sobre ela */}
+        <div className="p-3 space-y-2">
+          <p className="text-[9px] font-black text-white uppercase tracking-widest truncate">{asset.name}</p>
+          {asset.copy && (
+            <p className="text-[8px] text-neutral-500 line-clamp-2 italic">{asset.copy}</p>
+          )}
+          <div className="flex gap-1 pt-1">
+            <button
+              onClick={() => onAssetAction?.(asset.id, 'top_performer')}
+              title="Top Performer"
+              className={`flex-none w-7 h-7 rounded-lg flex items-center justify-center text-sm transition-all ${
+                isTopPerformer 
+                  ? 'bg-yellow-500 text-black' 
+                  : 'bg-neutral-800 text-neutral-500 hover:bg-yellow-500/20 hover:text-yellow-400'
+              }`}
+            >
+              ⭐
+            </button>
+            <button
+              onClick={() => onAssetAction?.(asset.id, 'approved')}
+              title="Aprovar"
+              className={`flex-1 h-7 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
+                asset.status === 'approved'
+                  ? 'bg-green-500 text-white'
+                  : 'bg-neutral-800 text-neutral-500 hover:bg-green-500/20 hover:text-green-400'
+              }`}
+            >
+              ✓
+            </button>
+            <button
+              onClick={() => onAssetAction?.(asset.id, 'rejected')}
+              title="Descartar"
+              className="flex-none w-7 h-7 rounded-lg bg-neutral-800 text-neutral-500 hover:bg-red-500/20 hover:text-red-400 text-sm flex items-center justify-center transition-all"
+            >
+              ×
+            </button>
+          </div>
         </div>
       </div>
-      <div className="p-4">
-        <p className="text-[10px] font-black text-white uppercase truncate">{asset.name}</p>
-        <p className="text-[9px] text-neutral-500 font-mono mt-1 uppercase">{asset.type}</p>
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="flex flex-col h-full bg-black relative">
@@ -157,12 +148,16 @@ const ChatArea: React.FC<ChatAreaProps> = ({ messages, onSendMessage, isLoading,
                 </div>
               )}
 
-              {m.attachedAssetIds && m.attachedAssetIds.length > 0 && (
-                <div className="mt-8 flex flex-wrap gap-4">
-                  {m.attachedAssetIds.map(id => {
-                    const asset = allAssets.find(a => a.id === id);
-                    return asset ? renderAsset(asset) : null;
-                  })}
+              {/* Assets vinculados a esta mensagem */}
+              {m.role === 'assistant' && m.attachedAssetIds && m.attachedAssetIds.length > 0 && (
+                <div className="mt-4 flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+                  {m.attachedAssetIds
+                    .map(id => allAssets.find(a => a.id === id))
+                    .filter((a): a is DesignAsset => !!a)
+                    .map(asset => (
+                      <AssetCard key={asset.id} asset={asset} />
+                    ))
+                  }
                 </div>
               )}
             </div>
@@ -170,14 +165,18 @@ const ChatArea: React.FC<ChatAreaProps> = ({ messages, onSendMessage, isLoading,
         ))}
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-neutral-900 px-6 py-4 rounded-[32px] flex items-center gap-4 shadow-2xl border border-white/5">
-              <div className="flex gap-1.5">
-                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
-                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.2s]" />
-                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.4s]" />
+            <div className="flex items-center gap-3 px-6 py-4 bg-neutral-900/60 rounded-2xl border border-white/5">
+              <div className="flex gap-1">
+                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
               </div>
-              <span className="text-[10px] font-black text-neutral-400 uppercase tracking-widest transition-all duration-500">
-                {getDisplayStatus()}
+              <span className="text-[10px] text-neutral-400 font-black uppercase tracking-widest">
+                {loadingStage === 'thinking' && 'Analisando estratégia...'}
+                {loadingStage === 'briefing' && 'Preparando brief criativo...'}
+                {loadingStage === 'generating' && 'Gerando assets...'}
+                {loadingStage === 'syncing' && 'Sincronizando...'}
+                {(!loadingStage || loadingStage === 'idle') && 'Processando...'}
               </span>
             </div>
           </div>

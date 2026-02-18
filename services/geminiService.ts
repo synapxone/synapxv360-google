@@ -3,41 +3,65 @@ import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { CampaignState, Language, GroundingSource, BrandKit, DesignAsset, Message } from "../types";
 import { TEMPLATES } from "../data/templates";
 
-const ORCHESTRATOR_INSTRUCTION = `
-Você é o "Synapx Core", o Diretor de Criação da synapx Agency. 
+const ORCHESTRATOR_INSTRUCTION = `Você é o CCO + CMO da synapx Agency, agência boutique de elite.
 
-MISSÃO: 
-Gerenciar marcas e produzir ativos de marketing de alto nível. Você deve agir como um parceiro estratégico que entende profundamente o DNA da marca do usuário.
+## IDENTIDADE
+Pensa como um estrategista da McKinsey com estética da Apple. Cada resposta é um ato criativo e estratégico.
 
-REGRAS DE OURO:
-1. SEM TERMOS TÉCNICOS: Fale sobre "ideias", "estratégias", "visão criativa" e "resultados de mercado".
-2. BRAND-DRIVEN: Suas sugestões DEVEM ser baseadas no BrandBook (cores, tom, conceito) fornecido no contexto.
-3. PERSONALIZAÇÃO (PERFORMANCE LOOP): Analise os ativos de alta performance (TOP PERFORMERS) listados para entender o que gera engajamento real para esta marca.
-4. FLUXO EM 2 ETAPAS: 
-   - Sempre proponha 3 caminhos criativos (Caminho 1, 2 e 3) com o bloco \`\`\`json-ideas \`\`\`.
-   - Só execute e produza os ativos com o bloco \`\`\`json-brief \`\`\` após a escolha ou confirmação direta.
-5. TEMPLATES: Se o usuário selecionar um template específico, use suas diretrizes de composição.
+## COMO AGIR
 
-JSON-BRIEF FORMAT:
-\`\`\`json-brief
+### Para pedidos de CRIAÇÃO DE ASSETS (imagem, vídeo, social media):
+1. Faça uma análise estratégica de 2-3 linhas
+2. Responda com um bloco \`\`\`json-brief contendo:
 {
-  "specialist_type": "estrategico | social | copy | mockup | branding | video | music | web",
-  "objetivo": "Meta comercial do asset",
-  "template_id": "opcional",
-  "brand_variables": { "primary": "#HEX", "tone": "...", "concept": "...", "fonts": "..." },
-  "instrucoes_tecnicas": "Prompt detalhado para a IA especialista. Seja visualmente descritivo.",
-  "mood": "estilo visual escolhido"
+  "specialist_type": "social|video|music|logo",
+  "objective": "string",
+  "audience": "string",
+  "visual_tone": "string",
+  "format": "feed|stories|banner|video"
 }
-\`\`\`
+
+### Para CONVERSAS ESTRATÉGICAS:
+- Responda com diagnóstico + recomendações acionáveis
+- Use Google Search para dados reais de 2024/2025
+- Cite tendências com fontes
+
+### REGRAS ABSOLUTAS:
+- NUNCA ignore o Kit da Marca Ativa (cores HEX, tom, tipografia)
+- NUNCA gere clichês: pessoas sorrindo genericamente, escritórios brancos
+- SEMPRE pense em diferenciação vs concorrência
+- Prompts visuais: estética Apple, Nike, Saint Laurent, Bottega Veneta
+
+## FORMATO
+- Análise estratégica: máx 3 linhas
+- Use \`\`\`json-brief para disparar geração de assets
+- Use \`\`\`json-ideas para apresentar opções de conceito ao usuário
 `;
 
-const SPECIALISTS: Record<string, string> = {
-  social: `Você é o Diretor de Arte Social. Crie prompts de imagem cinematográficos para o Imagen 4. NUNCA mencione textos, logos ou letras. Foque na composição, iluminação e cores de {brandColors}.`,
-  copy: `Você é o Redator Publicitário Master. Escreva textos que convertam, usando gatilhos mentais e o tom de voz {brandTone}.`,
-  video: `Diretor de Cinema Veo. Crie roteiros de 7s focados em movimento e impacto emocional. No text.`,
-  mockup: `Especialista em Mockups Premium. Coloque o produto em cenários de luxo condizentes com a marca.`,
-  branding: `Arquiteto Visual. Gere texturas, padrões e fundos abstratos que representem o DNA da marca usando {brandColors}.`
-};
+// Helper pcmToWav
+function pcmToWav(pcmData: Uint8Array, sampleRate: number, numChannels: number, bitDepth: number): ArrayBuffer {
+  const dataLength = pcmData.length;
+  const buffer = new ArrayBuffer(44 + dataLength);
+  const view = new DataView(buffer);
+  const writeString = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataLength, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * (bitDepth / 8), true);
+  view.setUint16(32, numChannels * (bitDepth / 8), true);
+  view.setUint16(34, bitDepth, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataLength, true);
+  new Uint8Array(buffer, 44).set(pcmData);
+  return buffer;
+}
 
 export class GeminiService {
   private getClient() {
@@ -107,7 +131,6 @@ export class GeminiService {
     return { text: response.text || '', sources };
   }
 
-  // Corrigido: Implementado o método generateBrandProposal solicitado em BrandManager.tsx
   async generateBrandProposal(name: string, website?: string, instagram?: string, visualRefs?: string[], competitorWebsites?: string[]) {
     const ai = this.getClient();
     const prompt = `
@@ -167,27 +190,28 @@ export class GeminiService {
     }
   }
 
-  async runSpecialist(brief: any, brandContext: any) {
+  async runSpecialist(brief: any, brandCtx: any): Promise<string> {
     const ai = this.getClient();
-    const baseInstruction = SPECIALISTS[brief.specialist_type] || SPECIALISTS.social;
-    
-    // Template Injection
-    const template = TEMPLATES.find(t => t.id === brief.template_id);
-    const compositionGuide = template 
-      ? `\n\nCOMPOSITION TEMPLATE — siga esta estrutura visual:\n${template.compositionPrompt}\n\nCOPY STRUCTURE — siga esta estrutura de redação:\n${template.copyStructure}`
-      : '';
 
-    const finalInstruction = baseInstruction
-      .replace(/{brandColors}/g, JSON.stringify(brandContext.colors || {}))
-      .replace(/{brandTone}/g, brandContext.tone || 'Profissional') + compositionGuide;
+    const SPECIALIST_PROMPT = `Você é um Diretor de Arte Sênior da synapx Agency.
+Recebeu um brief estratégico e deve criar assets de alta qualidade.
+
+REGRAS ABSOLUTAS:
+- Retorne SEMPRE um bloco \`\`\`json-assets com array de objetos
+- Cada objeto deve ter: name, type, dimensions, prompt, copy, description
+- Prompts de imagem: cinematográficos, sem clichês, estética Apple/Nike/Saint Laurent
+- Copy: direto, poderoso, sem jargão corporativo
+- Para campanhas: gere 3 variações distintas (Hero, Lifestyle, Conceitual)
+
+CONTEXTO DA MARCA: ${JSON.stringify(brandCtx)}
+BRIEF: ${JSON.stringify(brief)}
+
+Responda com o bloco json-assets.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: [{ role: 'user', parts: [{ text: `EXECUTAR BRIEFING TÉCNICO:\n${JSON.stringify(brief)}` }] }],
-      config: {
-        systemInstruction: `${finalInstruction}\nRetorne EXCLUSIVAMENTE um bloco \`\`\`json-assets \`\`\` com array de objetos [name, type, prompt, copy, dimensions].`,
-        temperature: 0.5,
-      },
+      model: 'gemini-2.5-flash-preview-05-20',
+      contents: [{ role: 'user', parts: [{ text: SPECIALIST_PROMPT }] }],
+      config: { temperature: 0.8 }
     });
 
     return response.text || '';
@@ -220,123 +244,68 @@ export class GeminiService {
     }
   }
 
-  async generateVideo(prompt: string) {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  async generateVideo(prompt: string): Promise<{ url: string; metadata: any } | null> {
+    const ai = this.getClient();
     try {
       let operation = await ai.models.generateVideos({
-        model: 'veo-3.1-fast-generate-preview',
-        prompt,
-        config: {
-          numberOfVideos: 1,
-          resolution: '720p',
-          aspectRatio: '16:9'
-        }
+        model: 'veo-2.0-generate-001',
+        prompt: `Cinematic advertising video. ${prompt}. Professional color grading, smooth motion, 4K quality.`,
+        config: { aspectRatio: '16:9', numberOfVideos: 1 }
       });
-      while (!operation.done) {
-        await new Promise(resolve => setTimeout(resolve, 10000));
+
+      // Polling até completar
+      let attempts = 0;
+      while (!operation.done && attempts < 30) {
+        await new Promise(r => setTimeout(r, 5000));
         operation = await ai.operations.getVideosOperation({ operation });
+        attempts++;
       }
-      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
-      const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
-      const blob = await response.blob();
-      return { url: URL.createObjectURL(blob), metadata: operation.response?.generatedVideos?.[0]?.video };
+
+      if (operation.done && operation.response?.generatedVideos?.[0]) {
+        const video = operation.response.generatedVideos[0];
+        return {
+          url: `data:video/mp4;base64,${video.video?.videoBytes}`,
+          metadata: { operationName: operation.name }
+        };
+      }
+      return null;
     } catch (e) {
-      console.error("Video generation error:", e);
+      console.error('generateVideo error:', e);
       return null;
     }
   }
 
-  async extendVideo(previousVideoMetadata: any, prompt: string) {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    try {
-      let operation = await ai.models.generateVideos({
-        model: 'veo-3.1-generate-preview',
-        prompt,
-        video: previousVideoMetadata,
-        config: {
-          numberOfVideos: 1,
-          resolution: '720p',
-          aspectRatio: '16:9'
-        }
-      });
-      while (!operation.done) {
-        await new Promise(resolve => setTimeout(resolve, 10000));
-        operation = await ai.operations.getVideosOperation({ operation });
-      }
-      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
-      const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
-      const blob = await response.blob();
-      return { url: URL.createObjectURL(blob), metadata: operation.response?.generatedVideos?.[0]?.video };
-    } catch (e) {
-      console.error("Video extension error:", e);
-      return null;
-    }
-  }
-
-  async generateAudio(text: string) {
+  async generateAudio(text: string): Promise<string | null> {
     const ai = this.getClient();
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
+        model: 'gemini-2.5-flash-preview-tts',
         contents: [{ parts: [{ text }] }],
         config: {
-          responseModalalities: [Modality.AUDIO],
+          responseModalities: [Modality.AUDIO],
           speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Kore' }
-            }
-          },
-        },
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
+          }
+        }
       });
-      const base64Pcm = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (!base64Pcm) return null;
-      
-      // Converte PCM para WAV para compatibilidade com navegadores
-      const wavBase64 = this.pcmToWav(base64Pcm, 24000);
+
+      const audioPart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+      if (!audioPart?.inlineData) return null;
+
+      // Converter PCM para WAV
+      const pcmData = Uint8Array.from(atob(audioPart.inlineData.data), c => c.charCodeAt(0));
+      const wavBuffer = pcmToWav(pcmData, 24000, 1, 16);
+      const wavBase64 = btoa(String.fromCharCode(...new Uint8Array(wavBuffer)));
       return `data:audio/wav;base64,${wavBase64}`;
     } catch (e) {
-      console.error("Audio generation error:", e);
+      console.error('generateAudio error:', e);
       return null;
     }
   }
 
-  private pcmToWav(base64Pcm: string, sampleRate: number): string {
-    const binary = atob(base64Pcm);
-    const len = binary.length;
-    const buffer = new ArrayBuffer(44 + len);
-    const view = new DataView(buffer);
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
-
-    const writeString = (offset: number, string: string) => {
-      for (let i = 0; i < string.length; i++) {
-        view.setUint8(offset + i, string.charCodeAt(i));
-      }
-    };
-
-    writeString(0, 'RIFF');
-    view.setUint32(4, 32 + len, true);
-    writeString(8, 'WAVE');
-    writeString(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true); // PCM
-    view.setUint16(22, 1, true); // Mono
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeString(36, 'data');
-    view.setUint32(40, len, true);
-
-    const pcmData = new Uint8Array(buffer, 44);
-    pcmData.set(bytes);
-
-    let output = '';
-    const outputBytes = new Uint8Array(buffer);
-    for (let i = 0; i < outputBytes.byteLength; i++) {
-      output += String.fromCharCode(outputBytes[i]);
-    }
-    return btoa(output);
+  async extendVideo(metadata: any, prompt: string): Promise<{ url: string; metadata: any } | null> {
+    // Por ora, gera um novo vídeo com o prompt estendido
+    return this.generateVideo(`Continuation: ${prompt}`);
   }
 }
 

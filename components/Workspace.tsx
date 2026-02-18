@@ -228,47 +228,63 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onUpdateAssets, onSendMess
       
       <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 no-scrollbar pb-32">
         {activeAssets.map(asset => (
-          <div key={asset.id} className="bg-neutral-900/40 rounded-[32px] border border-white/5 overflow-hidden flex flex-col group shadow-2xl transition-all hover:bg-neutral-900 relative">
-            <div className="aspect-square relative overflow-hidden bg-black">
-               {asset.imageUrl && <img src={asset.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />}
-               {asset.videoUrl && <video src={asset.videoUrl} className="w-full h-full object-cover" controls />}
-               {asset.audioUrl && <div className="h-full flex items-center justify-center bg-indigo-900/10 text-4xl">🎵</div>}
-               
-               {/* Performance Loop Badge */}
-               {asset.performance?.feedback === 'top_performer' && (
-                 <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-yellow-500 text-black px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest shadow-xl">
-                   <span>⭐</span> TOP PERFORMER
-                 </div>
-               )}
-
-               <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center gap-2 p-6 backdrop-blur-sm">
-                  <div className="flex w-full gap-2">
-                    <button onClick={() => onAssetAction(asset.id, 'approved')} className="flex-1 py-2.5 bg-green-600 hover:bg-green-500 text-white text-[9px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Aprovar</button>
-                    <button onClick={() => handleToggleTopPerformer(asset)} className={`flex-1 py-2.5 border text-[9px] font-black rounded-xl uppercase tracking-widest transition-all ${asset.performance?.feedback === 'top_performer' ? 'bg-yellow-500 text-black border-yellow-400' : 'bg-white/10 text-white border-white/20'}`}>
-                      {asset.performance?.feedback === 'top_performer' ? 'Remover Top' : '⭐ Top'}
-                    </button>
-                  </div>
-                  
-                  <div className="flex w-full gap-2">
-                    <button onClick={() => setEditingAsset(asset)} className="flex-1 py-2.5 bg-indigo-600 text-white text-[9px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Editar</button>
-                    {(asset.imageUrl || asset.videoUrl) && (
-                      <button onClick={() => setPreviewAsset(asset)} className="flex-1 py-2.5 bg-white/20 text-white text-[9px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all border border-white/30 backdrop-blur-md">Ads Preview</button>
-                    )}
-                  </div>
-                  
-                  <button onClick={() => handleDownload(asset, false)} className="w-full py-2.5 bg-white text-black hover:bg-indigo-600 hover:text-white text-[9px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Baixar</button>
-                  <button onClick={() => onAssetAction(asset.id, 'rejected')} className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white text-[9px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all">Excluir</button>
-               </div>
-
-               <div className="absolute top-4 right-4 z-10">
-                 <span className={`px-3 py-1 text-[8px] font-black uppercase rounded-full ${asset.status === 'approved' ? 'bg-green-500 text-white' : 'bg-neutral-800/80 backdrop-blur-md text-neutral-400'}`}>
-                   {asset.status}
-                 </span>
-               </div>
+          <div key={asset.id} className="group bg-neutral-900/20 rounded-[32px] overflow-hidden border border-white/5 hover:border-indigo-500/20 transition-all duration-500">
+            {/* Imagem — sem overlay que esconde */}
+            <div className="aspect-square relative bg-neutral-900 overflow-hidden">
+              {asset.imageUrl ? (
+                <img src={asset.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={asset.name} />
+              ) : asset.videoUrl ? (
+                <video src={asset.videoUrl} className="w-full h-full object-cover" muted loop autoPlay />
+              ) : asset.audioUrl ? (
+                <div className="w-full h-full flex items-center justify-center bg-neutral-800">
+                  <span className="text-4xl">🎵</span>
+                </div>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center animate-pulse bg-neutral-800">
+                  <span className="text-sm text-neutral-600 uppercase tracking-widest">Gerando...</span>
+                </div>
+              )}
+              {/* Badge top performer */}
+              {asset.performance?.feedback === 'top_performer' && (
+                <div className="absolute top-3 left-3 px-2 py-1 bg-yellow-500 text-black text-[8px] font-black rounded-full">
+                  ⭐ TOP
+                </div>
+              )}
+              {/* Badge status */}
+              {asset.status === 'approved' && (
+                <div className="absolute top-3 right-3 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white text-xs font-black">✓</div>
+              )}
             </div>
-            <div className="p-6">
-              <p className="text-[11px] font-black text-white uppercase truncate">{asset.name}</p>
-              <p className="text-[9px] text-neutral-500 font-mono mt-1 uppercase tracking-widest">{asset.type}</p>
+
+            {/* Info */}
+            <div className="p-6 space-y-3">
+              <div>
+                <p className="text-[9px] text-indigo-500 font-black uppercase tracking-widest">{asset.type || 'Asset'}</p>
+                <h4 className="font-bold text-white text-base tracking-tight truncate mt-1">{asset.name}</h4>
+                {asset.copy && <p className="text-[10px] text-neutral-500 line-clamp-2 mt-1 italic">{asset.copy}</p>}
+              </div>
+
+              {/* Botões — sempre visíveis, abaixo da imagem */}
+              <div className="flex gap-2 pt-2 border-t border-white/5">
+                <button 
+                  onClick={() => setEditingAsset(asset)} 
+                  className="flex-1 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-white text-[9px] font-black rounded-xl uppercase tracking-widest transition-all"
+                >
+                  Editor
+                </button>
+                <button 
+                  onClick={() => setPreviewAsset(asset)} 
+                  className="flex-1 py-2.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white text-[9px] font-black rounded-xl uppercase tracking-widest transition-all"
+                >
+                  Mockup
+                </button>
+                <button 
+                   onClick={() => handleToggleTopPerformer(asset)}
+                   className={`w-9 py-2.5 rounded-xl text-xs flex items-center justify-center transition-all ${asset.performance?.feedback === 'top_performer' ? 'bg-yellow-500 text-black' : 'bg-neutral-800 text-neutral-500 hover:text-yellow-400'}`}
+                >
+                   ⭐
+                </button>
+              </div>
             </div>
           </div>
         ))}
