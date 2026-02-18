@@ -93,6 +93,7 @@ export interface DesignAsset {
   status?: 'pending' | 'approved' | 'rejected';
   isMockup?: boolean;
   parentAssetId?: string;
+  metadata?: any;
   created_at?: string;
 }
 

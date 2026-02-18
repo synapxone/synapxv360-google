@@ -12,13 +12,16 @@ interface WorkspaceProps {
   onDeleteBrand: (id: string) => void;
   onUpdateAssets: (assets: DesignAsset[]) => void;
   onSendMessage: (content: string) => void;
+  onExtendVideo: (asset: DesignAsset, extensionPrompt: string) => void;
   language: Language;
 }
 
-const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenerateLogo, onUpdateBrand, onDeleteBrand, onUpdateAssets, onSendMessage, language }) => {
+const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenerateLogo, onUpdateBrand, onDeleteBrand, onUpdateAssets, onSendMessage, onExtendVideo, language }) => {
   const activeBrand = state.brands.find(b => b.id === state.activeBrandId);
   const [isEditingIdentity, setIsEditingIdentity] = useState(false);
   const [viewingPromptAsset, setViewingPromptAsset] = useState<DesignAsset | null>(null);
+  const [extendingVideoAsset, setExtendingVideoAsset] = useState<DesignAsset | null>(null);
+  const [extensionPrompt, setExtensionPrompt] = useState('');
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
 
   const groupedAssets = useMemo(() => {
@@ -51,10 +54,14 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenera
       approve: "Aprovar",
       reject: "Recusar",
       view_prompt: "Ver Prompt",
+      extend_video: "Estender Vídeo (+7s)",
       copy_prompt: "Copiar Copy",
       copied: "Copiado!",
       request_folder: "Briefing",
-      prompt_modal_title: "Inteligência Criativa"
+      prompt_modal_title: "Inteligência Criativa",
+      extend_modal_title: "Narrativa Cinematic",
+      extend_modal_sub: "O que acontece a seguir neste anúncio?",
+      extend_btn: "GERAR EXTENSÃO"
     },
     en: {
       empty: "Your creative workspace will come to life as assets are generated.",
@@ -68,10 +75,14 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenera
       approve: "Approve",
       reject: "Reject",
       view_prompt: "View Prompt",
+      extend_video: "Extend Video (+7s)",
       copy_prompt: "Copy Text",
       copied: "Copied!",
       request_folder: "Briefing",
-      prompt_modal_title: "Creative Intel"
+      prompt_modal_title: "Creative Intel",
+      extend_modal_title: "Cinematic Narrative",
+      extend_modal_sub: "What happens next in this ad?",
+      extend_btn: "GENERATE EXTENSION"
     }
   }[language === 'es' ? 'en' : language];
 
@@ -117,7 +128,6 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenera
           
           {activeBrand && (
             <section className="space-y-12 animate-in fade-in duration-700">
-               {/* Hero Brand Section */}
                <div className="flex flex-col lg:flex-row items-center justify-between gap-12 border-b border-white/5 pb-12">
                 <div className="flex-1 space-y-4 text-center lg:text-left">
                    <h2 className="text-6xl lg:text-9xl font-display font-black text-white tracking-tighter italic uppercase">{activeBrand.name}</h2>
@@ -130,10 +140,8 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenera
                 )}
               </div>
 
-              {/* Brand DNA Visualizer */}
               {activeBrand.kit && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8 p-10 bg-neutral-900/20 border border-white/5 rounded-[48px] backdrop-blur-xl">
-                  {/* Colors */}
                   <div className="space-y-6">
                     <h3 className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.2em]">{t.colors}</h3>
                     <div className="flex gap-3">
@@ -146,7 +154,6 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenera
                     </div>
                   </div>
 
-                  {/* Typography */}
                   <div className="space-y-6">
                     <h3 className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.2em]">{t.typo}</h3>
                     <div className="space-y-1">
@@ -155,7 +162,6 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenera
                     </div>
                   </div>
 
-                  {/* Voice/Tone */}
                   <div className="space-y-6">
                     <h3 className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.2em]">{t.tone}</h3>
                     <div className="flex flex-wrap gap-2">
@@ -169,7 +175,6 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenera
             </section>
           )}
 
-          {/* Asset Library */}
           <section className="space-y-24 pb-40">
             {groupedAssets.map((group) => (
               <div key={group.id} className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
@@ -199,6 +204,9 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenera
                             <button onClick={() => handleAssetStatus(asset.id, 'rejected')} className="py-4 bg-red-500 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest">{t.reject}</button>
                           </div>
                           <button onClick={() => setViewingPromptAsset(asset)} className="w-full py-4 bg-neutral-800 text-white text-[10px] font-bold rounded-2xl border border-white/5 uppercase tracking-widest">{t.view_prompt}</button>
+                          {asset.videoUrl && asset.metadata && (
+                            <button onClick={() => setExtendingVideoAsset(asset)} className="w-full py-4 bg-indigo-600 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl">{t.extend_video}</button>
+                          )}
                         </div>
                       </div>
 
@@ -240,6 +248,37 @@ const Workspace: React.FC<WorkspaceProps> = ({ state, onGenerateMockup, onGenera
             <button onClick={() => handleCopy(viewingPromptAsset.prompt, viewingPromptAsset.id)} className="w-full py-4 bg-white text-black text-[10px] font-black rounded-2xl uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all">
               {copyStatus === viewingPromptAsset.id ? t.copied : t.copy_prompt}
             </button>
+          </div>
+        </div>
+      )}
+
+      {extendingVideoAsset && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/95 backdrop-blur-md" onClick={() => setExtendingVideoAsset(null)}>
+          <div className="bg-neutral-900 border border-white/10 rounded-[40px] w-full max-w-xl p-10 space-y-8" onClick={e => e.stopPropagation()}>
+            <div className="space-y-2">
+              <h3 className="text-3xl font-display font-black text-white uppercase italic tracking-tighter">{t.extend_modal_title}</h3>
+              <p className="text-xs text-neutral-500 font-bold uppercase tracking-widest">{t.extend_modal_sub}</p>
+            </div>
+            <textarea 
+              value={extensionPrompt}
+              onChange={e => setExtensionPrompt(e.target.value)}
+              className="w-full bg-black border border-neutral-800 rounded-2xl p-6 text-sm text-white min-h-[120px] outline-none focus:border-indigo-500 transition-all placeholder:text-neutral-700 font-medium"
+              placeholder="Ex: A câmera se aproxima do produto e revela os detalhes do acabamento de luxo..."
+            />
+            <div className="flex gap-4">
+              <button onClick={() => setExtendingVideoAsset(null)} className="flex-1 py-5 bg-neutral-800 text-neutral-400 text-[10px] font-black rounded-2xl uppercase tracking-widest">CANCELAR</button>
+              <button 
+                onClick={() => {
+                  if (!extensionPrompt.trim()) return;
+                  onExtendVideo(extendingVideoAsset, extensionPrompt);
+                  setExtendingVideoAsset(null);
+                  setExtensionPrompt('');
+                }} 
+                className="flex-[2] py-5 bg-indigo-600 text-white text-[10px] font-black rounded-2xl uppercase tracking-widest shadow-xl shadow-indigo-600/20 active:scale-95"
+              >
+                {t.extend_btn}
+              </button>
+            </div>
           </div>
         </div>
       )}

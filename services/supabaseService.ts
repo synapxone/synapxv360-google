@@ -43,11 +43,14 @@ export const supabaseService = {
       type: a.type,
       dimensions: a.dimensions,
       imageUrl: a.image_url,
+      videoUrl: a.video_url,
+      audioUrl: a.audio_url,
       prompt: a.prompt,
       copy: a.copy,
       status: a.status,
       isMockup: a.is_mockup,
       description: '',
+      metadata: a.metadata,
       created_at: a.created_at
     }));
   },
@@ -62,10 +65,13 @@ export const supabaseService = {
       type: asset.type,
       dimensions: asset.dimensions,
       image_url: asset.imageUrl,
+      video_url: asset.videoUrl,
+      audio_url: asset.audioUrl,
       prompt: asset.prompt,
       copy: asset.copy,
       status: asset.status,
-      is_mockup: asset.isMockup
+      is_mockup: asset.isMockup,
+      metadata: asset.metadata
     };
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(asset.id);
@@ -109,7 +115,6 @@ export const supabaseService = {
   },
 
   async saveProjectState(userId: string, state: CampaignState, messages: any[]) {
-    // Assets are now managed separately for better scale
     const cleanState = { activeBrandId: state.activeBrandId, brief: state.brief };
     return await supabase.from('projects').upsert({ 
       user_id: userId, 

@@ -160,7 +160,6 @@ const App: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // 1. AGENTE ORQUESTRADOR (Synapx Core)
       const { text, sources } = await gemini.chat(content, referenceImage || null, messagesRef.current, stateRef.current, language);
       
       const assistantMessage: Message = {
@@ -182,12 +181,9 @@ const App: React.FC = () => {
         typography: activeBrand.kit?.typography
       } : { name: 'Generic', concept: 'Global Excellence', colors: {}, tone: 'Professional' };
 
-      // 2. PROCESSAR BRIEF PARA ESPECIALISTAS
       const briefMatch = text.match(/```json-brief\n([\s\S]*?)\n```/);
       if (briefMatch) {
         const briefData = JSON.parse(briefMatch[1]);
-        
-        // Chamar Agente Especialista passando o contexto real da marca
         const specialistOutput = await gemini.runSpecialist(briefData, brandContext);
         const assetsMatch = specialistOutput.match(/```json-assets\n([\s\S]*?)\n```/);
         
@@ -200,11 +196,16 @@ const App: React.FC = () => {
             let mediaUrl: string | null = null;
             let videoUrl: string | undefined = undefined;
             let audioUrl: string | undefined = undefined;
+            let videoMeta: any = null;
 
             const brandColorContext = brandContext.colors ? `Colors: ${JSON.stringify(brandContext.colors)}` : '';
 
             if (briefData.specialist_type === 'video') {
-              videoUrl = await gemini.generateVideo(`${asset.prompt}. Paleta de cores: ${brandColorContext}`) || undefined;
+              const res = await gemini.generateVideo(`${asset.prompt}. Paleta de cores: ${brandColorContext}`);
+              if (res) {
+                videoUrl = res.url;
+                videoMeta = res.metadata;
+              }
             } else if (briefData.specialist_type === 'music') {
               audioUrl = await gemini.generateAudio(asset.copy || asset.prompt) || undefined;
             } else if (['social', 'mockup', 'branding', 'web'].includes(briefData.specialist_type)) {
@@ -225,6 +226,7 @@ const App: React.FC = () => {
               prompt: asset.prompt || '',
               copy: asset.copy || briefData.copy_proposta || assistantMessage.content,
               description: asset.description || '',
+              metadata: videoMeta,
               status: 'pending'
             };
 
@@ -248,6 +250,35 @@ const App: React.FC = () => {
       setIsLoading(false); 
     }
   }, [userProfile, language, persist, useHighEnd]);
+
+  const handleExtendVideo = async (asset: DesignAsset, extensionPrompt: string) => {
+    if (!userProfile || !asset.metadata) return;
+    setIsLoading(true);
+    try {
+      const res = await gemini.extendVideo(extensionPrompt, asset.metadata);
+      if (res) {
+        const extendedAsset: DesignAsset = {
+          ...asset,
+          id: Math.random().toString(36).substr(2, 9),
+          name: `${asset.name} (Extended)`,
+          videoUrl: res.url,
+          metadata: res.metadata,
+          prompt: `${asset.prompt} | Extension: ${extensionPrompt}`,
+          status: 'pending',
+          created_at: new Date().toISOString()
+        };
+        const { data: saved } = await supabaseService.saveAsset(userProfile.id, extendedAsset);
+        if (saved) {
+          setState(prev => ({ ...prev, assets: [extendedAsset, ...prev.assets] }));
+          setActiveTab('workspace');
+        }
+      }
+    } catch (e) {
+      console.error("Video Extension Error:", e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleDeleteBrand = async (id: string) => {
     if (!window.confirm(language === 'pt' ? 'Excluir?' : 'Delete?')) return;
@@ -303,6 +334,7 @@ const App: React.FC = () => {
               onDeleteBrand={handleDeleteBrand}
               onUpdateAssets={handleUpdateAssets}
               onSendMessage={handleSendMessage}
+              onExtendVideo={handleExtendVideo}
               onGenerateLogo={() => handleSendMessage("Como Designer Senior, crie agora o logo oficial minimalista para minha marca ativa usando o motor Imagen 4.")} 
             />
           )}

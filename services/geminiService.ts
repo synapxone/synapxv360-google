@@ -38,7 +38,6 @@ const SPECIALISTS: Record<string, string> = {
 };
 
 export class GeminiService {
-  // Always initialize client with named parameter apiKey from environment.
   private getClient() {
     return new GoogleGenAI({ apiKey: process.env.API_KEY });
   }
@@ -47,7 +46,6 @@ export class GeminiService {
     const ai = this.getClient();
     const activeBrand = currentState.brands.find(b => b.id === currentState.activeBrandId);
     
-    // context injection with BrandKit data
     const brandContext = activeBrand 
       ? `[DNA DA MARCA ATIVA]
          Nome: ${activeBrand.name}
@@ -73,7 +71,6 @@ export class GeminiService {
     }
     contents.push({ role: 'user', parts: currentParts });
 
-    // Using gemini-3-pro-preview for advanced reasoning and grounding tasks.
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents,
@@ -84,12 +81,10 @@ export class GeminiService {
       },
     });
 
-    // Extract grounding chunks for Google Search.
     const sources: GroundingSource[] = (response.candidates?.[0]?.groundingMetadata?.groundingChunks || [])
       .filter(chunk => chunk.web)
       .map(chunk => ({ title: chunk.web?.title, uri: chunk.web?.uri }));
 
-    // Access .text property directly.
     return { text: response.text || '', sources };
   }
 
@@ -119,7 +114,6 @@ export class GeminiService {
   }
 
   async generateImage(prompt: string, brandContext?: string, useHighEnd: boolean = true) {
-    // Create instance right before API call as per guidelines for Imagen/Veo.
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const masterPrompt = `Commercial High-End Photography. Visual Identity: ${brandContext}. Scene: ${prompt}. Professional studio lighting, matching brand palette, 8k resolution.`;
 
@@ -136,13 +130,11 @@ export class GeminiService {
       } catch (e) { console.warn("Imagen fallback"); }
     }
 
-    // Fallback to gemini-2.5-flash-image.
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: { parts: [{ text: masterPrompt }] }
     });
     
-    // Iterate through all parts to find the image part for nano banana series models.
     if (response.candidates?.[0]?.content?.parts) {
       for (const part of response.candidates[0].content.parts) {
         if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
@@ -152,13 +144,11 @@ export class GeminiService {
   }
 
   async generateVideo(prompt: string) {
-    // Mandatory API key selection check for Veo models.
     // @ts-ignore
     if (window.aistudio && !(await window.aistudio.hasSelectedApiKey())) {
       // @ts-ignore
       await window.aistudio.openSelectKey();
     }
-    // New instance created right before call to ensure up-to-date API key.
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     try {
       let operation = await ai.models.generateVideos({
@@ -170,19 +160,48 @@ export class GeminiService {
         await new Promise(r => setTimeout(r, 10000));
         operation = await ai.operations.getVideosOperation({ operation: operation });
       }
-      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
-      // Fetch video from URI and append API key.
+      const videoObject = operation.response?.generatedVideos?.[0]?.video;
+      const downloadLink = videoObject?.uri;
       const res = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
       const videoBlob = await res.blob();
-      // Explicitly cast to unknown then Blob to avoid potential type conflicts with genai Blob.
-      return URL.createObjectURL(videoBlob as unknown as Blob);
+      return { 
+        url: URL.createObjectURL(videoBlob as unknown as Blob),
+        metadata: videoObject
+      };
+    } catch (e) { return null; }
+  }
+
+  async extendVideo(prompt: string, previousVideoMetadata: any) {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    try {
+      let operation = await ai.models.generateVideos({
+        model: 'veo-3.1-generate-preview',
+        prompt: prompt,
+        video: previousVideoMetadata,
+        config: {
+          numberOfVideos: 1,
+          resolution: '720p',
+          aspectRatio: '16:9' // Deve ser o mesmo do original
+        }
+      });
+      while (!operation.done) {
+        await new Promise(r => setTimeout(r, 10000));
+        operation = await ai.operations.getVideosOperation({ operation: operation });
+      }
+      const videoObject = operation.response?.generatedVideos?.[0]?.video;
+      const downloadLink = videoObject?.uri;
+      const res = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+      const videoBlob = await res.blob();
+      return { 
+        url: URL.createObjectURL(videoBlob as unknown as Blob),
+        metadata: videoObject
+      };
     } catch (e) { return null; }
   }
 
   async generateAudio(text: string) {
     const ai = this.getClient();
     try {
-      // Using gemini-2.5-flash-preview-tts for speech generation.
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text }] }],
@@ -191,7 +210,6 @@ export class GeminiService {
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
         },
       });
-      // Audio bytes are raw PCM data.
       const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       return data ? `data:audio/pcm;base64,${data}` : null;
     } catch (e) { return null; }
@@ -199,7 +217,6 @@ export class GeminiService {
 
   async generateBrandProposal(name: string, website?: string, instagram?: string, visualReferences?: string[]): Promise<BrandKit> {
     const ai = this.getClient();
-    // Using gemini-3-pro-preview for complex research tasks with Google Search grounding.
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: `Deep research for brand "${name}" (Web: ${website || 'N/A'}). Extract visual DNA. Return JSON with concept, tone, colors, and typography.`,
@@ -236,7 +253,6 @@ export class GeminiService {
         }
       }
     });
-    // Access response.text directly (not as a method).
     return JSON.parse(response.text || '{}');
   }
 }

@@ -1,4 +1,4 @@
-# 📘 Documentação Técnica: synapx Agency (v362)
+# 📘 Documentação Técnica: synapx Agency (v363)
 
 ## VISÃO GERAL
 A **synapx Agency** é uma plataforma de "Agentic UI" projetada para automatizar o ciclo completo de marketing e design. Utiliza uma arquitetura multi-agente baseada no Google Gemini para transformar intenções em ativos reais (branding, imagens, vídeos e áudio).
@@ -7,9 +7,11 @@ A **synapx Agency** é uma plataforma de "Agentic UI" projetada para automatizar
 
 ---
 
-## ESTADO ATUAL (24/05/2024)
+## ESTADO ATUAL (25/05/2024)
 
 ### ✅ Implementado e funcionando
+- **Veo Video Extension (v363):** Capacidade de estender vídeos gerados em 7 segundos adicionais mantendo consistência visual.
+- **Persistência de Metadata:** O sistema agora salva objetos técnicos de resposta da IA para reutilização em workflows de edição e extensão.
 - **Persistência Total (Supabase):** Sincronização em tempo real de marcas, assets e histórico de mensagens.
 - **Deep Brand Scan:** Extração automática de DNA visual (cores, tom, conceito) via Google Search.
 - **Orquestração Multi-Agente:** Sistema "Synapx Core" que delega tarefas para especialistas (Social, Copy, Branding, etc).
@@ -18,8 +20,8 @@ A **synapx Agency** é uma plataforma de "Agentic UI" projetada para automatizar
 - **Brand Identity Hub:** Edição manual e assistida de logos, símbolos e moodboards.
 
 ### 🚧 Em desenvolvimento
-- **Veo Video Extension:** Capacidade de estender vídeos gerados para narrativas mais longas.
 - **Mockup Factory:** Automação de aplicação de marca em contextos físicos (3D).
+- **Audio Visualizer:** Representação visual das ondas sonoras para os assets de áudio.
 
 ### ❌ Ainda não iniciado
 - **Gemini Live API:** Consultoria estratégica via voz em tempo real.
@@ -28,9 +30,11 @@ A **synapx Agency** é uma plataforma de "Agentic UI" projetada para automatizar
 ---
 
 ## PRÓXIMOS PASSOS (prioridade)
-1. [🔥 Alta] **Veo Video Extension** — Continuar de: Implementação do loop de geração e tratamento de blob para downloads seguros.
-2. [🟡 Média] **Mockup Factory** — Definição de templates e prompts de ambientação (Indoor/Outdoor).
-3. [🟢 Baixa] **Gemini Live API** — Pesquisar viabilidade técnica de streaming de áudio PCM bidirecional.
+
+1. 🔥 **[Alta] Mockup Factory** — Iniciar arquitetura de geração de mockups 3D via Imagen 4 com máscaras de contexto físico.
+2. 🟡 **[Média] Gemini Live API** — Pesquisar disponibilidade da API de voz em tempo real e viabilidade de integração com o ChatArea.
+3. 🟢 **[Baixa] Multi-Scene Video** — Criar vídeos complexos unindo múltiplos segmentos de 7s (Video Stacking).
+4. 🟢 **[Baixa] Auto-Pilot Social** — Mapear integrações com APIs do Instagram/Meta para postagem direta.
 
 ---
 
@@ -47,31 +51,38 @@ A **synapx Agency** é uma plataforma de "Agentic UI" projetada para automatizar
 ---
 
 ## DECISÕES TÉCNICAS IMPORTANTES
-1. **RefSync (useRef + State):** Utilizamos `useRef` em conjunto com `useState` no `App.tsx` para garantir que processos assíncronos de longa duração (como geração de vídeo de 2 minutos) não sofram com *stale closures*.
-2. **Protocolo JSON-Brief:** O orquestrador delega produção através de um schema rígido para garantir que o especialista tenha todo o DNA da marca.
-3. **Multi-Instância GenAI:** Instanciamos o cliente `GoogleGenAI` dentro de cada chamada de mídia pesada (Imagen/Veo) para assegurar o uso das chaves de API selecionadas pelo usuário.
-4. **RLS (Row Level Security):** Políticas ativas no Supabase garantem isolamento total de dados entre usuários.
+1. **RefSync (useRef + State):** Utilizamos `useRef` em conjunto com `useState` no `App.tsx` para garantir que processos assíncronos de longa duração (como geração de vídeo) não sofram com *stale closures*.
+2. **Protocolo JSON-Brief:** O orquestrador não gera assets diretamente; ele gera um briefing técnico em JSON que é interpretado por um especialista.
+3. **Multi-Instância GenAI:** Instanciamos o cliente `GoogleGenAI` dentro de cada chamada de mídia pesada (Imagen/Veo) para assegurar o uso das chaves de API recentes.
+4. **RLS (Row Level Security):** Todas as tabelas do Supabase possuem políticas ativas que garantem o isolamento de dados por usuário.
 
----
-
-## SCHEMA DO PROTOCOLO JSON-BRIEF
+### Schema do JSON-Brief
 O orquestrador (Synapx Core) deve obrigatoriamente produzir este schema para delegar aos especialistas:
 
 ```json
 {
   "specialist_type": "estrategico | social | copy | mockup | branding | video | music | web",
-  "objetivo": "Meta clara do asset (ex: Conversão, Awareness)",
-  "brand_variables": { 
-    "primary": "#HEX", 
-    "tone": "Atributos de voz", 
-    "concept": "Big Idea da marca", 
-    "fonts": "Tipografia display/corpo" 
+  "brand_context": {
+    "colors": {
+      "primary": "#HEX",
+      "secondary": "#HEX",
+      "accent": "#HEX",
+      "neutral": "#HEX"
+    },
+    "typography": {
+      "display": "Nome da fonte",
+      "body": "Nome da fonte"
+    },
+    "tone": ["atributo1", "atributo2"],
+    "concept": "Big Idea / posicionamento da marca"
   },
-  "instrucoes_tecnicas": "Instruções cruas para o especialista (prompts de imagem ou estrutura de texto)",
-  "pergunta_de_refinamento": "Pergunta estratégica para o usuário",
-  "mood": "luxo | tech | minimalista | organico | industrial"
+  "task": "Descrição clara do que deve ser produzido",
+  "format": "9:16 | 1:1 | 16:9 | square",
+  "references": ["url_ou_base64_opcional"]
 }
 ```
+
+> ⚠️ **Regra:** Nenhum especialista deve ser chamado sem um JSON-Brief válido. O orquestrador é o único responsável por gerá-lo.
 
 ---
 
@@ -83,23 +94,38 @@ O orquestrador (Synapx Core) deve obrigatoriamente produzir este schema para del
 
 ## HISTÓRICO DE IMPLEMENTAÇÕES
 
-### 24/05/2024 — Atualização de Documentação e Prioridades
+### 25/05/2024 — Veo Video Extension (v363)
 **O que foi feito:**
-- Atualização do `DOCUMENTATION.md` com o roadmap priorizado.
-- Documentação formal do schema `JSON-Brief`.
-- Registro do mapa de arquivos atualizado (v362).
+- Implementada a funcionalidade "Estender Vídeo" no Workspace.
+- Adicionado campo `metadata` ao `DesignAsset` para armazenar o objeto de vídeo da API.
+- Criado método `extendVideo` no `geminiService` utilizando `veo-3.1-generate-preview`.
+- Documentação dos prompts dos agentes e schema JSON-Brief.
 
-**Arquivos modificados:**
-- `DOCUMENTATION.md` — Inclusão de prioridades e schemas técnicos.
-
-**Decisões técnicas:**
-- Padronização do schema JSON-Brief para evitar alucinações de campos por parte dos modelos de IA durante a delegação.
-
-**Estado atual:**
-- v362 Estável. Sistema de marcas e orquestração funcional.
-
-**Próximos passos sugeridos:**
-- Iniciar prototipagem da extensão de vídeos (Veo Extension).
+### 24/05/2024 — Brand Identity v2 (v362)
+**O que foi feito:**
+- Melhoria no `BrandManager` para permitir uploads manuais de logos e moodboards.
+- Refatoração da persistência de marcas.
 
 ---
-*Documentação v362 - Engenharia synapx Agency*
+
+## PROMPTS DOS AGENTES (geminiService.ts)
+
+### Orquestrador — Synapx Core
+> "Você é o 'Synapx Core', o Diretor de Estratégia e Operações da synapx Agency. Sua inteligência é alimentada estritamente pelo BRANDBOOK da marca ativa fornecido no contexto."
+
+### Especialistas Técnicos
+Ativados via `runSpecialist` utilizando o contexto injetado pelo brief.
+
+| specialist_type | Nome do Agente | Prompt Base |
+|---|---|---|
+| `estrategico` | Estrategista Market Intel | "Você é o Estrategista de Inteligência de Mercado. Use o Google Search para referências reais." |
+| `social` | Diretor de Arte Social | "Você é o Diretor de Arte (Social Media). Crie prompts de imagem detalhados usando as cores {brandColors} e estilo {brandTone}." |
+| `copy` | Redator Publicitário | "Você é o Redator Publicitário Sênior. Escreva adaptando ao Tom de Voz {brandTone} e conceito {brandConcept}." |
+| `mockup` | Especialista em Mockups | "Você é o Especialista em Ambientação. Situe a marca {brandName} em cenários premium com iluminação {brandColors}." |
+| `branding` | Arquiteto de Marca | "Você é o Arquiteto de Identidade Visual. Evolua logos e patterns baseados no conceito {brandConcept}." |
+| `video` | Diretor de Cinema | "Você é o Diretor de Cinema (Veo Engine). Roteirize vídeos cinematográficos usando a paleta {brandColors}." |
+| `music` | Sound Designer | "Você é o Sound Designer. Crie trilhas e letras que reflitam a energia de {brandTone}." |
+| `web` | Lead UI/UX | "Você é o Lead de UI/UX. Projete interfaces usando {brandColors} para CTAs e hierarquia visual." |
+
+---
+*Documentação v363 - Engenharia synapx Agency*
