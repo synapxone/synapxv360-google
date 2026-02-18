@@ -1,0 +1,8 @@
+{
+  "name": "synapx Agency",
+  "description": "Sua agência full-service de marketing e design movida a IA. De branding a campanhas completas em segundos.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
